@@ -1,4 +1,3 @@
-//
 //  CercAnagrammiApp.swift
 //  CercAnagrammi
 //
