@@ -6,13 +6,50 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXCopyFilesBuildPhase section */
+		E410F5C72F7EC05C00760B43 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		E410F5AF2F7EBEEE00760B43 /* CercAnagrammi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CercAnagrammi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E410F5C92F7EC05C00760B43 /* WordImporter */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WordImporter; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E410F5D12F7EC0CF00760B43 /* Exceptions for "CercAnagrammi" folder in "CercAnagrammi" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Importer/main.swift,
+				Importer/WordImporter.swift,
+			);
+			target = E410F5AE2F7EBEEE00760B43 /* CercAnagrammi */;
+		};
+		E410F5D22F7EC0CF00760B43 /* Exceptions for "CercAnagrammi" folder in "WordImporter" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Importer/main.swift,
+				Importer/WordImporter.swift,
+				Models/Word.swift,
+			);
+			target = E410F5C82F7EC05C00760B43 /* WordImporter */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E410F5B12F7EBEEE00760B43 /* CercAnagrammi */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E410F5D12F7EC0CF00760B43 /* Exceptions for "CercAnagrammi" folder in "CercAnagrammi" target */,
+				E410F5D22F7EC0CF00760B43 /* Exceptions for "CercAnagrammi" folder in "WordImporter" target */,
+			);
 			path = CercAnagrammi;
 			sourceTree = "<group>";
 		};
@@ -20,6 +57,13 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		E410F5AC2F7EBEEE00760B43 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E410F5C62F7EC05C00760B43 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -41,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				E410F5AF2F7EBEEE00760B43 /* CercAnagrammi.app */,
+				E410F5C92F7EC05C00760B43 /* WordImporter */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +115,25 @@
 			productReference = E410F5AF2F7EBEEE00760B43 /* CercAnagrammi.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E410F5C82F7EC05C00760B43 /* WordImporter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E410F5CD2F7EC05C00760B43 /* Build configuration list for PBXNativeTarget "WordImporter" */;
+			buildPhases = (
+				E410F5C52F7EC05C00760B43 /* Sources */,
+				E410F5C62F7EC05C00760B43 /* Frameworks */,
+				E410F5C72F7EC05C00760B43 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WordImporter;
+			packageProductDependencies = (
+			);
+			productName = WordImporter;
+			productReference = E410F5C92F7EC05C00760B43 /* WordImporter */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -81,6 +145,9 @@
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					E410F5AE2F7EBEEE00760B43 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					E410F5C82F7EC05C00760B43 = {
 						CreatedOnToolsVersion = 26.4;
 					};
 				};
@@ -100,6 +167,7 @@
 			projectRoot = "";
 			targets = (
 				E410F5AE2F7EBEEE00760B43 /* CercAnagrammi */,
+				E410F5C82F7EC05C00760B43 /* WordImporter */,
 			);
 		};
 /* End PBXProject section */
@@ -116,6 +184,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		E410F5AB2F7EBEEE00760B43 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E410F5C52F7EC05C00760B43 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -310,6 +385,36 @@
 			};
 			name = Release;
 		};
+		E410F5CE2F7EC05C00760B43 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = TY6W6JY45R;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E410F5CF2F7EC05C00760B43 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = TY6W6JY45R;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -327,6 +432,15 @@
 			buildConfigurations = (
 				E410F5BB2F7EBEEF00760B43 /* Debug */,
 				E410F5BC2F7EBEEF00760B43 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E410F5CD2F7EC05C00760B43 /* Build configuration list for PBXNativeTarget "WordImporter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E410F5CE2F7EC05C00760B43 /* Debug */,
+				E410F5CF2F7EC05C00760B43 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
