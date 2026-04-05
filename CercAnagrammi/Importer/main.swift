@@ -5,9 +5,4 @@ guard let parsed = parseArgs(CommandLine.arguments) else {
     exit(1)
 }
 
-Task { @MainActor in
-    await runImport(parsed)
-    exit(0)
-}
-
-dispatchMain()
+runImport(parsed)
