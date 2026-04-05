@@ -80,6 +80,34 @@ final class WordDatabase {
         }
         return results
     }
+
+    /// Returns all words from the database (be cautious: for large DBs, this may be slow)
+    func allWords() -> [String] {
+        guard let db else { return [] }
+        let sql = "SELECT word FROM words"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        var results: [String] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let cStr = sqlite3_column_text(stmt, 0) {
+                results.append(String(cString: cStr))
+            }
+        }
+        return results
+    }
+}
+
+// ─────────────────────────────────────────────
+// MARK: - MatchResult
+// ─────────────────────────────────────────────
+
+struct MatchResult: Identifiable {
+    let id = UUID()
+    let word: String
+    let isFullMatch: Bool
+    let leftover: String
+    let usedLetterCount: Int
 }
 
 // ─────────────────────────────────────────────
@@ -88,11 +116,50 @@ final class WordDatabase {
 
 struct ContentView: View {
     @State private var searchText = ""
-    @State private var results:   [String] = []
+    @State private var results: [MatchResult] = []
 
     private func performSearch() {
-        // Always search by the sorted string, using the anagrams(of:) function
-        results = WordDatabase.shared.anagrams(of: searchText)
+        let input = searchText
+        guard !input.isEmpty else {
+            results = []
+            return
+        }
+        // Get all possible candidates (restricting to words containing first letter for speed if you like)
+        let candidates = WordDatabase.shared.allWords()
+        // For demo, use all candidates; for large DB, would need to scan all words efficiently
+        var output: [MatchResult] = []
+        let inputLetters = Array(input)
+        let inputLetterCounts = inputLetters.reduce(into: [:]) { $0[$1, default: 0] += 1 }
+
+        for word in candidates {
+            if word == input { continue }
+            let wordLetters = Array(word)
+            var tempCounts = inputLetterCounts
+            var canMake = true
+            for c in wordLetters {
+                if let count = tempCounts[c], count > 0 {
+                    tempCounts[c]! -= 1
+                } else {
+                    canMake = false
+                    break
+                }
+            }
+            if canMake {
+                let leftover = tempCounts.flatMap { Array(repeating: $0.key, count: $0.value) }.map(String.init).joined()
+                let isFull = leftover.isEmpty && wordLetters.count == inputLetters.count
+                output.append(MatchResult(word: word, isFullMatch: isFull, leftover: leftover, usedLetterCount: wordLetters.count))
+            }
+        }
+        // Sort: full matches at top, then by usedLetterCount descending, then word
+        results = output.sorted {
+            if $0.isFullMatch != $1.isFullMatch {
+                return $0.isFullMatch
+            }
+            if $0.usedLetterCount != $1.usedLetterCount {
+                return $0.usedLetterCount > $1.usedLetterCount
+            }
+            return $0.word < $1.word
+        }
     }
 
     var body: some View {
@@ -100,6 +167,11 @@ struct ContentView: View {
             TextField("Cerca una parola...", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .padding()
+                .autocorrectionDisabled(true)
+                .autocapitalization(.allCharacters)
+                .onChange(of: searchText) { _, newValue in
+                        searchText = newValue.uppercased()
+                    }
 
             Divider()
 
@@ -109,9 +181,19 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             } else {
-                List(results, id: \.self) { word in
-                    Text(word)
-                        .font(.system(.body, design: .monospaced))
+                List(results) { result in
+                    HStack {
+                        Text(result.word)
+                            .font(.system(.body, design: .monospaced))
+                            .fontWeight(result.isFullMatch ? .bold : .regular)
+                            .foregroundStyle(result.isFullMatch ? .blue : .primary)
+                        if !result.isFullMatch && !result.leftover.isEmpty {
+                            Spacer()
+                            Text("+ " + result.leftover)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 .listStyle(.plain)
             }
