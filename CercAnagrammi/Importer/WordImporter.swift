@@ -1,7 +1,7 @@
 // WordImporter.swift
 // CLI tool to populate a lean SQLite database from a newline-delimited .txt file.
 // Only uppercase A-Z strings are accepted.
-// Produces a single-table DB: words(word, sorted, length)
+// Produces a single-table DB: words(word, sorted)
 //
 // Usage:
 //   WordImporter <input-file> --output <output-db-path> [--batch-size N] [--dry-run]
@@ -114,11 +114,9 @@ func openDatabase(at path: String) -> OpaquePointer {
     let ddl = """
         CREATE TABLE IF NOT EXISTS words (
             word   TEXT PRIMARY KEY,
-            sorted TEXT NOT NULL,
-            length INTEGER NOT NULL
+            sorted TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_sorted ON words(sorted);
-        CREATE INDEX IF NOT EXISTS idx_length ON words(length);
     """
     guard sqlite3_exec(db, ddl, nil, nil, nil) == SQLITE_OK else {
         print("❌ Schema creation failed: \(sqliteError(db))")
@@ -188,7 +186,7 @@ func runImport(_ parsed: ParsedArgs) {
     defer { sqlite3_close(db) }
 
     var stmt: OpaquePointer?
-    let insertSQL = "INSERT OR IGNORE INTO words(word, sorted, length) VALUES(?, ?, ?)"
+    let insertSQL = "INSERT OR IGNORE INTO words(word, sorted) VALUES(?, ?)"
     guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
         print("❌ Failed to prepare insert statement: \(sqliteError(db))")
         exit(1)
@@ -220,11 +218,9 @@ func runImport(_ parsed: ParsedArgs) {
         seenInRun.insert(word)
 
         let sorted = sortedLetters(removeAccents(word))
-        let length = word.count
 
         sqlite3_bind_text(stmt, 1, (word   as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (sorted as NSString).utf8String, -1, nil)
-        sqlite3_bind_int (stmt, 3, Int32(length))
 
         if sqlite3_step(stmt) != SQLITE_DONE {
             print("  ⚠︎  Insert failed at line \(lineNumber + 1): \(sqliteError(db))")
@@ -243,7 +239,13 @@ func runImport(_ parsed: ParsedArgs) {
     }
 
     sqlite3_exec(db, "COMMIT", nil, nil, nil)
-
+    
+    // ── Finalize: collapse WAL and switch to DELETE journal mode ─────────────
+    sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+    sqlite3_exec(db, "PRAGMA journal_mode=DELETE;", nil, nil, nil)
+    sqlite3_exec(db, "VACUUM;", nil, nil, nil)
+    
+    
     // ── Report ───────────────────────────────────────────────────────────────
 
     print("""
@@ -259,13 +261,15 @@ func runImport(_ parsed: ParsedArgs) {
 
     Schema:
       words(word   TEXT PRIMARY KEY,
-            sorted TEXT NOT NULL,
-            length INTEGER NOT NULL)
+            sorted TEXT NOT NULL)
       INDEX idx_sorted ON words(sorted)
-      INDEX idx_length ON words(length)
+
+    Journal mode set to DELETE (no -wal/-shm sidecars).
+    DB is self-contained and ready to bundle.
 
     Next step: drag Words.db into Xcode →
     app target → Copy Bundle Resources.
     ────────────────────────────────────────────
     """)
+    
 }

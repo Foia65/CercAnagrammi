@@ -37,7 +37,6 @@
 			membershipExceptions = (
 				Importer/main.swift,
 				Importer/WordImporter.swift,
-				Models/Word.swift,
 			);
 			target = E410F5C82F7EC05C00760B43 /* WordImporter */;
 		};

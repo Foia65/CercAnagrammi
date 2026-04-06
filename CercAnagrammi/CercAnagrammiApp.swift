@@ -6,6 +6,5 @@ struct CercAnagrammiApp: App {
         WindowGroup {
             ContentView()
         }
-        // no .modelContainer() needed anymore
     }
 }
