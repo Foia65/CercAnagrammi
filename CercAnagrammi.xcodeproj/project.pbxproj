@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E48FA6A42F85154100DE8867 /* .swiftlint.yml in Resources */ = {isa = PBXBuildFile; fileRef = E48FA6A32F85154100DE8867 /* .swiftlint.yml */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		E410F5C72F7EC05C00760B43 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -21,6 +25,7 @@
 /* Begin PBXFileReference section */
 		E410F5AF2F7EBEEE00760B43 /* CercAnagrammi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CercAnagrammi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E410F5C92F7EC05C00760B43 /* WordImporter */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WordImporter; sourceTree = BUILT_PRODUCTS_DIR; };
+		E48FA6A32F85154100DE8867 /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -75,6 +80,7 @@
 		E410F5A62F7EBEEE00760B43 = {
 			isa = PBXGroup;
 			children = (
+				E48FA6A32F85154100DE8867 /* .swiftlint.yml */,
 				E410F5B12F7EBEEE00760B43 /* CercAnagrammi */,
 				E410F5B02F7EBEEE00760B43 /* Products */,
 			);
@@ -97,6 +103,7 @@
 			buildConfigurationList = E410F5BA2F7EBEEF00760B43 /* Build configuration list for PBXNativeTarget "CercAnagrammi" */;
 			buildPhases = (
 				E410F5AB2F7EBEEE00760B43 /* Sources */,
+				E48FA6A22F8512FD00DE8867 /* ShellScript */,
 				E410F5AC2F7EBEEE00760B43 /* Frameworks */,
 				E410F5AD2F7EBEEE00760B43 /* Resources */,
 			);
@@ -176,10 +183,32 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E48FA6A42F85154100DE8867 /* .swiftlint.yml in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E48FA6A22F8512FD00DE8867 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/zsh\n\n# 1. Set PATH for Homebrew (critical for Xcode sandbox)\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n\n# 2. Debug output (visible in Xcode logs)\necho \"=== SwiftLint Debug ===\"\necho \"Config path: ${SRCROOT}/.swiftlint.yml\"\necho \"SwiftLint path: $(which swiftlint)\"\necho \"SwiftLint version: $(swiftlint --version)\"\n\n# 3. Run with absolute paths\n/opt/homebrew/bin/swiftlint lint \\\n  --config \"${SRCROOT}/.swiftlint.yml\" \\\n  --cache-path \"${SRCROOT}/DerivedData/SwiftLintCache\" \\\n  || echo \"SwiftLint completed with warnings\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		E410F5AB2F7EBEEE00760B43 /* Sources */ = {
@@ -329,12 +358,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = TY6W6JY45R;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -362,12 +391,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = TY6W6JY45R;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

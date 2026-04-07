@@ -9,23 +9,22 @@
 import Foundation
 import SQLite3
 
-
 // ─────────────────────────────────────────────
 // MARK: - Argument parsing
 // ─────────────────────────────────────────────
 
 struct ParsedArgs {
-    var inputPath:  String
+    var inputPath: String
     var outputPath: String
-    var batchSize:  Int
-    var dryRun:     Bool
+    var batchSize: Int
+    var dryRun: Bool
 }
 
 func parseArgs(_ args: [String]) -> ParsedArgs? {
-    var inputPath:  String? = nil
+    var inputPath: String? = nil
     var outputPath: String? = nil
-    var batchSize             = 5000
-    var dryRun                = false
+    var batchSize = 5000
+    var dryRun = false
 
     var i = 1
     while i < args.count {
@@ -35,7 +34,7 @@ func parseArgs(_ args: [String]) -> ParsedArgs? {
             if i < args.count { outputPath = args[i] }
         case "--batch-size":
             i += 1
-            if i < args.count, let v = Int(args[i]) { batchSize = v }
+            if i < args.count, let batchSizeValue = Int(args[i]) { batchSize = batchSizeValue }
         case "--dry-run":
             dryRun = true
         default:
@@ -65,40 +64,38 @@ func usage() {
     """)
 }
 
-
 // ─────────────────────────────────────────────
 // MARK: - Helpers
 // ─────────────────────────────────────────────
 
-func removeAccents(_ s: String) -> String {
-    s.applyingTransform(.stripDiacritics, reverse: false) ?? s
+func removeAccents(_ str: String) -> String {
+    str.applyingTransform(.stripDiacritics, reverse: false) ?? str
 }
 
 /// Anagram key: strip accents, sort letters.
 /// e.g. "CARET" → "ACERT", same as "TRACE" → "ACERT"
-func sortedLetters(_ s: String) -> String {
-    String(s.sorted())
+func sortedLetters(_ str: String) -> String {
+    String(str.sorted())
 }
 
-func isValidWord(_ s: String) -> Bool {
-    guard !s.isEmpty else { return false }
-    return s.unicodeScalars.allSatisfy { CharacterSet.uppercaseLetters.contains($0) }
+func isValidWord(_ str: String) -> Bool {
+    guard !str.isEmpty else { return false }
+    return str.unicodeScalars.allSatisfy { CharacterSet.uppercaseLetters.contains($0) }
 }
 
-func sqliteError(_ db: OpaquePointer?) -> String {
-    db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+func sqliteError(_ dBas: OpaquePointer?) -> String {
+    dBas.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
 }
-
 
 // ─────────────────────────────────────────────
 // MARK: - SQLite bootstrap
 // ─────────────────────────────────────────────
 
 func openDatabase(at path: String) -> OpaquePointer {
-    var db: OpaquePointer?
-    guard sqlite3_open_v2(path, &db,
+    var dBase: OpaquePointer?
+    guard sqlite3_open_v2(path, &dBase,
                           SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
-          let db else {
+          let dBase else {
         print("❌ Cannot open/create DB at \(path)")
         exit(1)
     }
@@ -109,7 +106,7 @@ func openDatabase(at path: String) -> OpaquePointer {
         PRAGMA temp_store   = MEMORY;
         PRAGMA cache_size   = -64000;
     """
-    sqlite3_exec(db, pragmas, nil, nil, nil)
+    sqlite3_exec(dBase, pragmas, nil, nil, nil)
 
     let ddl = """
         CREATE TABLE IF NOT EXISTS words (
@@ -118,14 +115,13 @@ func openDatabase(at path: String) -> OpaquePointer {
         );
         CREATE INDEX IF NOT EXISTS idx_sorted ON words(sorted);
     """
-    guard sqlite3_exec(db, ddl, nil, nil, nil) == SQLITE_OK else {
-        print("❌ Schema creation failed: \(sqliteError(db))")
+    guard sqlite3_exec(dBase, ddl, nil, nil, nil) == SQLITE_OK else {
+        print("❌ Schema creation failed: \(sqliteError(dBase))")
         exit(1)
     }
 
-    return db
+    return dBase
 }
-
 
 // ─────────────────────────────────────────────
 // MARK: - Importer
@@ -182,13 +178,13 @@ func runImport(_ parsed: ParsedArgs) {
 
     // ── Open DB & prepare statement ──────────────────────────────────────────
 
-    let db = openDatabase(at: targetURL.path)
-    defer { sqlite3_close(db) }
+    let dBase = openDatabase(at: targetURL.path)
+    defer { sqlite3_close(dBase) }
 
     var stmt: OpaquePointer?
     let insertSQL = "INSERT OR IGNORE INTO words(word, sorted) VALUES(?, ?)"
-    guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
-        print("❌ Failed to prepare insert statement: \(sqliteError(db))")
+    guard sqlite3_prepare_v2(dBase, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
+        print("❌ Failed to prepare insert statement: \(sqliteError(dBase))")
         exit(1)
     }
     defer { sqlite3_finalize(stmt) }
@@ -199,7 +195,7 @@ func runImport(_ parsed: ParsedArgs) {
     var batchCount = 0
     var valid = 0, skipped = 0, invalid = 0
 
-    sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+    sqlite3_exec(dBase, "BEGIN TRANSACTION", nil, nil, nil)
 
     for (lineNumber, rawWord) in lines.enumerated() {
         let word = rawWord
@@ -223,7 +219,7 @@ func runImport(_ parsed: ParsedArgs) {
         sqlite3_bind_text(stmt, 2, (sorted as NSString).utf8String, -1, nil)
 
         if sqlite3_step(stmt) != SQLITE_DONE {
-            print("  ⚠︎  Insert failed at line \(lineNumber + 1): \(sqliteError(db))")
+            print("  ⚠︎  Insert failed at line \(lineNumber + 1): \(sqliteError(dBase))")
         }
         sqlite3_reset(stmt)
 
@@ -231,20 +227,19 @@ func runImport(_ parsed: ParsedArgs) {
         batchCount += 1
 
         if batchCount >= parsed.batchSize {
-            sqlite3_exec(db, "COMMIT", nil, nil, nil)
-            sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+            sqlite3_exec(dBase, "COMMIT", nil, nil, nil)
+            sqlite3_exec(dBase, "BEGIN TRANSACTION", nil, nil, nil)
             batchCount = 0
             print("  … \(valid) words imported")
         }
     }
 
-    sqlite3_exec(db, "COMMIT", nil, nil, nil)
+    sqlite3_exec(dBase, "COMMIT", nil, nil, nil)
     
     // ── Finalize: collapse WAL and switch to DELETE journal mode ─────────────
-    sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
-    sqlite3_exec(db, "PRAGMA journal_mode=DELETE;", nil, nil, nil)
-    sqlite3_exec(db, "VACUUM;", nil, nil, nil)
-    
+    sqlite3_exec(dBase, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+    sqlite3_exec(dBase, "PRAGMA journal_mode=DELETE;", nil, nil, nil)
+    sqlite3_exec(dBase, "VACUUM;", nil, nil, nil)
     
     // ── Report ───────────────────────────────────────────────────────────────
 
