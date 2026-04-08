@@ -21,8 +21,8 @@ struct ParsedArgs {
 }
 
 func parseArgs(_ args: [String]) -> ParsedArgs? {
-    var inputPath: String? = nil
-    var outputPath: String? = nil
+    var inputPath: String?
+    var outputPath: String?
     var batchSize = 5000
     var dryRun = false
 
@@ -93,13 +93,12 @@ func sqliteError(_ dBas: OpaquePointer?) -> String {
 
 func openDatabase(at path: String) -> OpaquePointer {
     var dBase: OpaquePointer?
-    guard sqlite3_open_v2(path, &dBase,
-                          SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+    guard sqlite3_open_v2(path, &dBase, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
           let dBase else {
         print("❌ Cannot open/create DB at \(path)")
         exit(1)
     }
-
+    
     let pragmas = """
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous  = NORMAL;
