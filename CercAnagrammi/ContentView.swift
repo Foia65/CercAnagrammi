@@ -73,14 +73,21 @@ struct ContentView: View {
     @State private var deepSearchEnabled = false
     @State private var hasSearched = false
 
-    @State private var showingLeftoverSheet: Bool = false
-    @State private var currentLeftoverTitle: String = ""
-    @State private var currentLeftoverResults: [String] = []
-    
     @State private var loadingLeftovers: Set<String> = []
     @State private var leftoverCache: [String: [String]] = [:]
     @State private var allWordsCache: [String] = []
     @State private var liveSearchWorkItem: DispatchWorkItem?
+    
+    @State private var showingHelp = false
+    @State private var scrollToTopTrigger = false  // AGGIUNTO: trigger per scroll to top
+
+    private struct LeftoverPresentation: Identifiable {
+        let id = UUID()
+        let title: String
+        let words: [String]
+    }
+
+    @State private var leftoverSheetItem: LeftoverPresentation?
 
     private var groupedResults: [(count: Int, items: [MatchResult])] {
         let groups = Dictionary(grouping: results) { $0.usedLetterCount }
@@ -97,27 +104,58 @@ struct ContentView: View {
             VStack(spacing: 14) {
                 // Search Bar
                 HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    
                     TextField("Scrivi qui...", text: $searchText)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled(true)
                         .submitLabel(.search)
                         .onSubmit { performSearch() }
                     
-                    if !searchText.isEmpty {
-                        Button {
-                            if !searchAsYouType && !hasSearched {
-                                performSearch()
-                            } else {
-                                searchText = ""
-                                results = []
-                                hasSearched = false
+                    // Gruppo di bottoni uniformi
+                    HStack(spacing: 12) {  // Spaziatura uniforme tra i bottoni
+                        // Bottone 1: Cerca / Cancella
+                        if !searchText.isEmpty {
+                            Button {
+                                if !searchAsYouType && !hasSearched {
+                                    performSearch()
+                                } else {
+                                    searchText = ""
+                                    results = []
+                                    hasSearched = false
+                                }
+                            } label: {
+                                Image(systemName: (!searchAsYouType && !hasSearched) ? "arrow.right.circle.fill" : "xmark.circle.fill")
+                                    .font(.system(size: 22))  // Dimensione fissa uniforme
+                                    .foregroundStyle((!searchAsYouType && !hasSearched) ? .orange : .secondary)
+                                    .symbolRenderingMode(.hierarchical)
                             }
-                        } label: {
-                            Image(systemName: (!searchAsYouType && !hasSearched) ? "arrow.right.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle((!searchAsYouType && !hasSearched) ? .orange : .secondary)
                         }
+                        
+                        // Bottone 2: Scroll to Top (solo se ci sono risultati)
+                        if !results.isEmpty {
+                            Button(action: {
+                                scrollToTopTrigger.toggle()
+                            }) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 22))  // Stessa dimensione
+                                    .foregroundStyle(.secondary)
+                                    .symbolRenderingMode(.hierarchical)
+                            }
+                        }
+                        
+                        // Bottone 3: Help
+                        Button(action: { showingHelp = true }) {
+                            Image(systemName: "questionmark.circle.fill")
+                                .font(.system(size: 22))  // Stessa dimensione
+                                .foregroundStyle(.blue)
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        
+
                     }
+                    .buttonStyle(.plain)  // Rimuove l'effetto di default
                 }
                 .padding(10)
                 .background(Color(.secondarySystemBackground))
@@ -140,57 +178,47 @@ struct ContentView: View {
                         deepSearchEnabled.toggle()
                     }
                     
-                    // Modernized Stepper Capsule
-                    HStack(spacing: 8) {
-                        Image(systemName: "textformat.size")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        
-                        Text("\(minLength)")
-                            .font(.subheadline.monospacedDigit().weight(.medium))
-                        
-                        Stepper("", value: $minLength, in: 3...15)
-                            .labelsHidden()
-                            .controlSize(.small) // Native small size fits better
-                    }
-                    .padding(.leading, 12)
-                    .padding(.trailing, 4)
-                    .padding(.vertical, 6)
-                    .background(Color(.secondarySystemFill))
-                    .clipShape(Capsule())
+                    MinLengthControl(minLength: $minLength)
                 }
                 .padding(.horizontal)
             }
             .padding(.vertical, 12)
             .background(.ultraThinMaterial)
             
-            // Divider()
-            
             // --- LIST ---
             if results.isEmpty {
                 EmptyStateView(searchText: searchText, minLength: minLength)
             } else {
-                List {
-                    ForEach(groupedResults, id: \.count) { section in
-                        Section(header: Text("\(section.count) lettere")) {
-                            ForEach(section.items) { result in
-                                ResultRow(
-                                    result: result,
-                                    deepSearchEnabled: deepSearchEnabled,
-                                    leftoverCache: leftoverCache,
-                                    loadingLeftovers: loadingLeftovers,
-                                    onLoadLeftover: loadLeftover,
-                                    onShowSheet: { title, matches in
-                                        currentLeftoverTitle = title
-                                        currentLeftoverResults = matches
-                                        showingLeftoverSheet = true
-                                    }
-                                )
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(groupedResults, id: \.count) { section in
+                            Section(header: Text("\(section.count) lettere")) {
+                                ForEach(section.items) { result in
+                                    ResultRow(
+                                        result: result,
+                                        deepSearchEnabled: deepSearchEnabled,
+                                        leftoverCache: leftoverCache,
+                                        loadingLeftovers: loadingLeftovers,
+                                        onLoadLeftover: loadLeftover,
+                                        onShowSheet: { title, matches in
+                                            leftoverSheetItem = LeftoverPresentation(title: title, words: matches)
+                                        }
+                                    )
+                                    .id(result.id)  // AGGIUNTO: assegna ID per scroll to top
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .onChange(of: scrollToTopTrigger) { _, _ in
+                        if let firstSection = groupedResults.first,
+                           let firstItem = firstSection.items.first {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(firstItem.id, anchor: .top)
                             }
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
             }
             
             // --- FOOTER STATS ---
@@ -198,21 +226,21 @@ struct ContentView: View {
                 StatsBar(results: results)
             }
         }
-        .sheet(isPresented: $showingLeftoverSheet) {
-            LeftoverSheet(title: currentLeftoverTitle, words: currentLeftoverResults)
+        .sheet(item: $leftoverSheetItem) { item in
+            LeftoverSheet(title: item.title, words: item.words)
+        }
+        .fullScreenCover(isPresented: $showingHelp) {
+            HelpView()
         }
         .onAppear { loadInitialData() }
-        .onChange(of: fullMatchesOnly) { performSearch() }
-        .onChange(of: minLength) { performSearch() }
-        //        .onChange(of: deepSearchEnabled) { if $0 { triggerDeepSearch() } }
-        //        .onChange(of: searchText) { handleSearchTextChange($0) }
-        .onChange(of: deepSearchEnabled) { oldValue, newValue in
+        .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
+        .onChange(of: minLength) { _, _ in performSearch() }
+        .onChange(of: deepSearchEnabled) { _, newValue in
             if newValue { triggerDeepSearch() }
         }
-        .onChange(of: searchText) { oldValue, newValue in
+        .onChange(of: searchText) { _, newValue in
             handleSearchTextChange(newValue)
         }
-        
     }
 
     // ─── Logic ───
@@ -319,7 +347,8 @@ struct ResultRow: View {
                     .font(.system(.caption2, design: .monospaced))
 
                 Button {
-                    if isPurple { onShowSheet(result.leftover, matches ?? []) }
+                    guard isPurple, let matches, !matches.isEmpty else { return }
+                    onShowSheet(result.leftover, matches)
                 } label: {
                     HStack(spacing: 4) {
                         Text(result.leftover).font(.system(.caption, design: .monospaced))
@@ -351,7 +380,6 @@ struct ControlCapsule: View {
     let activeColor: Color
     let action: () -> Void
     
-    // Custom "Off" color that looks better than standard grey
     private var inactiveBackground: Color {
         Color.primary.opacity(0.06)
     }
@@ -360,11 +388,11 @@ struct ControlCapsule: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: icon)
-                    .symbolRenderingMode(.hierarchical) // Adds depth to icons
+                    .symbolRenderingMode(.hierarchical)
                     .font(.system(size: 14, weight: .bold))
                 
                 Text(title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded)) // Rounded feels more modern
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -378,23 +406,20 @@ struct ControlCapsule: View {
             .foregroundStyle(isActive ? activeColor : .primary.opacity(0.7))
             .clipShape(Capsule())
             .overlay {
-                // The "Pro" touch: A thin, vibrant border when active
                 Capsule()
                     .strokeBorder(
                         isActive ? activeColor.opacity(0.5) : .primary.opacity(0.1),
                         lineWidth: 1.5
                     )
             }
-            // Subtle shadow only when active to simulate a "pressed" or "raised" look
             .shadow(color: isActive ? activeColor.opacity(0.2) : .clear, radius: 4, x: 0, y: 2)
         }
-        .buttonStyle(ScaledButtonStyle()) // Custom style for haptic press effect
+        .buttonStyle(ScaledButtonStyle())
         .sensoryFeedback(.impact(weight: .light), trigger: isActive)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
     }
 }
 
-// Custom ButtonStyle to give that "Apple App Store" press effect
 struct ScaledButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -422,7 +447,6 @@ struct StepperButton: View {
 struct StatsBar: View {
     let results: [MatchResult]
     
-    // Calcolo della lunghezza media
     var averageLength: Double {
         guard !results.isEmpty else { return 0 }
         let total = results.reduce(0) { $0 + $1.word.count }
@@ -430,8 +454,7 @@ struct StatsBar: View {
     }
 
     var body: some View {
-        HStack(alignment: .center) {
-            // Sezione: Risultati Trovati
+        let content = HStack(alignment: .center) {
             StatItem(
                 value: "\(results.count)",
                 label: "Trovate"
@@ -441,7 +464,6 @@ struct StatsBar: View {
             Divider().frame(height: 20).opacity(0.5)
             Spacer()
 
-            // Sezione: Lunghezza Massima
             let maxLen = results.max(by: { $0.word.count < $1.word.count })?.word.count ?? 0
             StatItem(
                 value: "\(maxLen)",
@@ -453,36 +475,23 @@ struct StatsBar: View {
                 Divider().frame(height: 20).opacity(0.5)
                 Spacer()
 
-                // Sezione: Lunghezza Media
                 StatItem(
                     value: String(format: "%.1f", averageLength),
                     label: "Media"
                 )
             }
-            
-            Spacer()
-            
-            // Pulsante Help
-            Button {
-                // Azione per aprire l'help (es. sheet o navigation)
-                print("Open Help")
-            } label: {
-                Image(systemName: "questionmark.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.system(size: 28))
-                    .foregroundStyle(.blue) // Colore d'accento Apple standard
-            }
-            .padding(.trailing, 8)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial) // Più professionale del grigio solido
-        .clipShape(RoundedRectangle(cornerRadius: 12)) // Se la vuoi flottante
-        // .background(Color(.secondarySystemBackground)) // Opzione alternativa solida
+
+        return content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
     }
 }
 
-// Sotto-componente per STATS
 struct StatItem: View {
     let value: String
     let label: String
@@ -492,7 +501,7 @@ struct StatItem: View {
             Text(value)
                 .font(.system(.body, design: .monospaced).bold())
                 .foregroundStyle(.primary)
-            Text(label.uppercased()) // Uppercase leggero per un look più "Dashboard"
+            Text(label.uppercased())
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
         }
@@ -523,6 +532,39 @@ struct EmptyStateView: View {
                 .multilineTextAlignment(.center)
             Spacer()
         }
+    }
+}
+
+struct MinLengthControl: View {
+    @Binding var minLength: Int
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "textformat.size")
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: 14, weight: .bold))
+
+            Text("Lunghezza Min.")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+
+            Text("\(minLength)")
+                .font(.subheadline.monospacedDigit().weight(.medium))
+                .padding(.leading, 2)
+
+            Stepper("", value: $minLength, in: 3...15)
+                .labelsHidden()
+                .controlSize(.mini)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.06))
+        .foregroundStyle(.primary.opacity(0.7))
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1.5)
+        }
+        .shadow(color: .clear, radius: 4, x: 0, y: 2)
     }
 }
 
