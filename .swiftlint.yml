@@ -45,7 +45,8 @@ opt_in_rules:
   - yoda_condition
 
 file_length:
-  warning: 500
+  warning: 600
+  error: 700
   ignore_comment_only_lines: true
 
 disabled_rules:

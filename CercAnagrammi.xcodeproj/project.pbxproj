@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E48FA6A42F85154100DE8867 /* .swiftlint.yml in Resources */ = {isa = PBXBuildFile; fileRef = E48FA6A32F85154100DE8867 /* .swiftlint.yml */; };
+		E4E3784C2F8812CD00894F73 /* DictionaryDefinitionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4E3784B2F8812CD00894F73 /* DictionaryDefinitionView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -26,6 +27,7 @@
 		E410F5AF2F7EBEEE00760B43 /* CercAnagrammi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CercAnagrammi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E410F5C92F7EC05C00760B43 /* WordImporter */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WordImporter; sourceTree = BUILT_PRODUCTS_DIR; };
 		E48FA6A32F85154100DE8867 /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
+		E4E3784B2F8812CD00894F73 /* DictionaryDefinitionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryDefinitionView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -83,6 +85,7 @@
 				E48FA6A32F85154100DE8867 /* .swiftlint.yml */,
 				E410F5B12F7EBEEE00760B43 /* CercAnagrammi */,
 				E410F5B02F7EBEEE00760B43 /* Products */,
+				E4E3784B2F8812CD00894F73 /* DictionaryDefinitionView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -235,6 +238,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E4E3784C2F8812CD00894F73 /* DictionaryDefinitionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -375,7 +379,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = TY6W6JY45R;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -409,7 +413,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = TY6W6JY45R;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;

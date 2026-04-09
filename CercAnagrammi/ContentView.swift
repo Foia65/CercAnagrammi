@@ -1,5 +1,6 @@
 import SwiftUI
 import SQLite3
+import UIKit
 
 // ─────────────────────────────────────────────
 // MARK: - Database
@@ -79,7 +80,8 @@ struct ContentView: View {
     @State private var liveSearchWorkItem: DispatchWorkItem?
     
     @State private var showingHelp = false
-    @State private var scrollToTopTrigger = false  // AGGIUNTO: trigger per scroll to top
+    @State private var definitionTerm: String? = nil
+    @State private var scrollToTopTrigger = false
 
     private struct LeftoverPresentation: Identifiable {
         let id = UUID()
@@ -88,7 +90,7 @@ struct ContentView: View {
     }
 
     @State private var leftoverSheetItem: LeftoverPresentation?
-
+    
     private var groupedResults: [(count: Int, items: [MatchResult])] {
         let groups = Dictionary(grouping: results) { $0.usedLetterCount }
         return groups
@@ -152,8 +154,6 @@ struct ContentView: View {
                                 .foregroundStyle(.blue)
                                 .symbolRenderingMode(.hierarchical)
                         }
-                        
-
                     }
                     .buttonStyle(.plain)  // Rimuove l'effetto di default
                 }
@@ -202,9 +202,12 @@ struct ContentView: View {
                                         onLoadLeftover: loadLeftover,
                                         onShowSheet: { title, matches in
                                             leftoverSheetItem = LeftoverPresentation(title: title, words: matches)
+                                        },
+                                        onWordTapped: { word in
+                                            definitionTerm = word
                                         }
                                     )
-                                    .id(result.id)  // AGGIUNTO: assegna ID per scroll to top
+                                    .id(result.id)  // assegna ID per scroll to top
                                 }
                             }
                         }
@@ -231,6 +234,14 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $showingHelp) {
             HelpView()
+        }
+        .fullScreenCover(isPresented: Binding<Bool>(
+            get: { definitionTerm != nil },
+            set: { newValue in if !newValue { definitionTerm = nil } }
+        )) {
+            if let term = definitionTerm {
+                DictionaryDefinitionView(term: term)
+            }
         }
         .onAppear { loadInitialData() }
         .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
@@ -333,10 +344,19 @@ struct ResultRow: View {
     let loadingLeftovers: Set<String>
     let onLoadLeftover: (String) -> Void
     let onShowSheet: (String, [String]) -> Void
+    let onWordTapped: (String) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(result.word).font(.system(.subheadline, design: .monospaced))
+            Button {
+                onWordTapped(result.word)
+            } label: {
+                Text(result.word)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+
             Spacer()
 
             if !result.isFullMatch && !result.leftover.isEmpty {
@@ -510,12 +530,44 @@ struct StatItem: View {
 
 struct LeftoverSheet: View {
     let title: String; let words: [String]
+    @State private var selectedTerm: String?
+    @State private var showNoDefinitionAlert = false
+    @State private var lastMissingTerm: String = ""
+
     var body: some View {
         NavigationStack {
-            List(words, id: \.self) { Text($0).font(.system(.body, design: .monospaced)) }
-                .navigationTitle("Match per: \(title)")
-                .navigationBarTitleDisplayMode(.inline)
+            List(words, id: \.self) { word in
+                Button {
+                    selectedTerm = word
+                } label: {
+                    Text(word)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle("Match per: \(title)")
+            .navigationBarTitleDisplayMode(.inline)
         }
+        .fullScreenCover(isPresented: Binding<Bool>(
+            get: { selectedTerm != nil },
+            set: { newValue in if !newValue { selectedTerm = nil } }
+        )) {
+            if let term = selectedTerm {
+                DictionaryDefinitionView(term: term)
+            }
+        }
+//        .alert("Nessuna definizione trovata", isPresented: $showNoDefinitionAlert, actions: {
+//            Button("Cerca sul web") {
+//                let query = lastMissingTerm.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? lastMissingTerm
+//                if let url = URL(string: "https://www.google.com/search?q=\(query)") {
+//                    UIApplication.shared.open(url)
+//                }
+//            }
+//            Button("OK", role: .cancel) { }
+//        }, message: {
+//            Text("\"\(lastMissingTerm)\" non è presente nel dizionario.")
+//        })
     }
 }
 
