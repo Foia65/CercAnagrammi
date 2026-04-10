@@ -43,13 +43,22 @@ struct HelpView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
+            .toolbar {
                             ToolbarItem(placement: .topBarTrailing) {
-                                Button("Fine") { dismiss() }
+                                Button {
+                                    dismiss()
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 22, weight: .regular, design: .default))
+                                                    .foregroundStyle(.primary)
+                                                   // .frame(width: 35, height: 35)
+                                                   // .background(Color(.secondarySystemBackground))
+                                                    .clipShape(Circle())
+                                }
+                                .accessibilityLabel("Chiudi")
                             }
                         }
                         .background(.ultraThinMaterial)
-                        .background(.mint)
         }
         .presentationDetents([.medium, .large]) // iOS 16+
         .presentationDragIndicator(.visible)

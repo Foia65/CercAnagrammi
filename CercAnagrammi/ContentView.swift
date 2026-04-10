@@ -62,6 +62,304 @@ struct MatchResult: Identifiable {
 }
 
 // ─────────────────────────────────────────────
+// MARK: - App Bar
+// ─────────────────────────────────────────────
+
+/// La barra superiore scura con titolo, sottotitolo contestuale e azioni.
+struct AppBar: View {
+    
+    let resultCount: Int?          // nil = nessuna ricerca ancora
+    let showScrollTop: Bool
+    let onScrollTop: () -> Void
+    let onHelp: () -> Void
+    
+    let maxLengthText: String?
+    let averageText: String?
+
+    // Sottotitolo: feedback contestuale o etichetta fissa
+    private var subtitle: String {
+        // Base: feedback sul numero di risultati, oppure etichetta fissa quando non si è ancora cercato
+        let base: String = {
+            guard let count = resultCount else { return "" } // qui ci può stare un sottotitolo in attesa dei risultati
+            switch count {
+            case 0: return "Nessuna parola trovata"
+            case 1: return "1 parola trovata"
+            default: return "\(count) parole trovate"
+            }
+        }()
+        // Aggiungi statistiche se presenti
+        if let maxLengthText, let averageText, resultCount != nil, resultCount! > 0 {
+            return "\(base) • Lun. Max: \(maxLengthText) • Media: \(averageText)"
+        } else {
+            return base
+        }
+    }
+
+    private var subtitleColor: Color {
+        guard let count = resultCount else { return Color(hex: "#378ADD") }
+        return count == 0 ? Color(hex: "#F09595") : Color(hex: "#5DCAA5")
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("CercAnagramma")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Color(hex: "#E6F1FB"))
+
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(subtitleColor)
+                    .animation(.easeInOut(duration: 0.2), value: subtitle)
+            }
+
+            Spacer()
+
+            HStack(spacing: 12) {
+                if showScrollTop {
+                    AppBarButton(icon: "arrow.up.to.line", action: onScrollTop)
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
+                }
+                AppBarButton(icon: "questionmark", action: onHelp)
+            }
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showScrollTop)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(Color(hex: "#0C1B2E"))
+    }
+}
+
+struct AppBarButton: View {
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 32, height: 32)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                )
+                .foregroundStyle(Color.white.opacity(0.55))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// ─────────────────────────────────────────────
+// MARK: - Search Row
+// ─────────────────────────────────────────────
+
+/// Barra di ricerca con campo, contatore lettere, ✕ interno e bottone azione.
+struct SearchRow: View {
+    @Binding var searchText: String
+    let hasResults: Bool
+    let hasSearched: Bool
+    let searchAsYouType: Bool
+    let onSearch: () -> Void
+    let onReset: () -> Void
+
+    // Opzione 3: bottone FA SOLO RICERCA, sempre
+    private var isSearchDisabled: Bool {
+        searchText.isEmpty
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Campo
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+
+                TextField("Scrivi qui…", text: $searchText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled(true)
+                    .submitLabel(.search)
+                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .onSubmit {
+                        if !searchText.isEmpty {
+                            onSearch()
+                        }
+                    }
+
+                if !searchText.isEmpty {
+                    // Contatore lettere (solo caratteri non-spazio)
+                    let letterCount = searchText.filter { $0.isLetter }.count
+                    Text("\(letterCount)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+
+                    // ✕ dentro il campo: reset COMPLETO (testo + risultati)
+                    Button {
+                        searchText = ""
+                        onReset()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color(.systemGray3))
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5)
+            )
+            .animation(.easeInOut(duration: 0.15), value: searchText.isEmpty)
+
+            // Bottone azione: SOLO RICERCA (sempre icona lente)
+            Button {
+                onSearch()
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 40, height: 40)
+                    .background(isSearchDisabled ? Color(.systemGray4) : Color(hex: "#185FA5"))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .disabled(isSearchDisabled)
+            .sensoryFeedback(.impact(weight: .medium), trigger: hasSearched)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
+    }
+}
+
+// ─────────────────────────────────────────────
+// MARK: - Controls Row
+// ─────────────────────────────────────────────
+
+struct ControlsRow: View {
+    @Binding var fullMatchesOnly: Bool
+    @Binding var searchAsYouType: Bool
+    @Binding var deepSearchEnabled: Bool
+    @Binding var minLength: Int
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ControlChip(
+                    title: "Solo 100%",
+                    isActive: fullMatchesOnly,
+                    activeColor: .green
+                ) { fullMatchesOnly.toggle() }
+
+                ControlChip(
+                    title: "Live",
+                    isActive: searchAsYouType,
+                    activeColor: .blue
+                ) { searchAsYouType.toggle() }
+
+                ControlChip(
+                    title: "Avanzata",
+                    isActive: deepSearchEnabled,
+                    activeColor: .purple
+                ) { deepSearchEnabled.toggle() }
+
+                Divider()
+                    .frame(height: 18)
+                    .padding(.horizontal, 2)
+
+                // Controllo lunghezza minima
+                HStack(spacing: 5) {
+                    Button { if minLength > 3 { minLength -= 1 } } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 20, height: 20)
+                            .background(Color(.systemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(minLength <= 3)
+
+                    Text("Min \(minLength)")
+                        .font(.system(size: 12, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
+
+                    Button { if minLength < 15 { minLength += 1 } } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 20, height: 20)
+                            .background(Color(.systemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(minLength >= 15)
+                }
+                .sensoryFeedback(.selection, trigger: minLength)
+            }
+            .padding(.horizontal, 14)
+        }
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(.separator).opacity(0.4))
+                .frame(height: 0.5)
+        }
+    }
+}
+
+struct ControlChip: View {
+    let title: String
+    let isActive: Bool
+    let activeColor: Color
+    let action: () -> Void
+
+    private var bgColor: Color {
+        isActive ? activeColor.opacity(0.12) : Color(.systemBackground)
+    }
+    private var fgColor: Color {
+        isActive ? activeColor : Color.secondary
+    }
+    private var borderColor: Color {
+        isActive ? activeColor.opacity(0.4) : Color(.separator).opacity(0.5)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(fgColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(bgColor)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(borderColor, lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .light), trigger: isActive)
+        .animation(.easeInOut(duration: 0.15), value: isActive)
+    }
+}
+
+// ─────────────────────────────────────────────
 // MARK: - Main View
 // ─────────────────────────────────────────────
 
@@ -78,9 +376,9 @@ struct ContentView: View {
     @State private var leftoverCache: [String: [String]] = [:]
     @State private var allWordsCache: [String] = []
     @State private var liveSearchWorkItem: DispatchWorkItem?
-    
+
     @State private var showingHelp = false
-    @State private var definitionTerm: String? 
+    @State private var definitionTerm: String?
     @State private var scrollToTopTrigger = false
 
     private struct LeftoverPresentation: Identifiable {
@@ -88,9 +386,8 @@ struct ContentView: View {
         let title: String
         let words: [String]
     }
-
     @State private var leftoverSheetItem: LeftoverPresentation?
-    
+
     private var groupedResults: [(count: Int, items: [MatchResult])] {
         let groups = Dictionary(grouping: results) { $0.usedLetterCount }
         return groups
@@ -101,91 +398,39 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            
-            // --- HEADER & CONTROLS ---
-            VStack(spacing: 14) {
-                // Search Bar
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    
-                    TextField("Scrivi qui...", text: $searchText)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled(true)
-                        .submitLabel(.search)
-                        .onSubmit { performSearch() }
-                    
-                    // Gruppo di bottoni uniformi
-                    HStack(spacing: 12) {  // Spaziatura uniforme tra i bottoni
-                        // Bottone 1: Cerca / Cancella
-                        if !searchText.isEmpty {
-                            Button {
-                                if !searchAsYouType && !hasSearched {
-                                    performSearch()
-                                } else {
-                                    searchText = ""
-                                    results = []
-                                    hasSearched = false
-                                }
-                            } label: {
-                                Image(systemName: (!searchAsYouType && !hasSearched) ? "arrow.right.circle.fill" : "xmark.circle.fill")
-                                    .font(.system(size: 22))  // Dimensione fissa uniforme
-                                    .foregroundStyle((!searchAsYouType && !hasSearched) ? .orange : .secondary)
-                                    .symbolRenderingMode(.hierarchical)
-                            }
-                        }
-                        
-                        // Bottone 2: Scroll to Top (solo se ci sono risultati)
-                        if !results.isEmpty {
-                            Button(action: {
-                                scrollToTopTrigger.toggle()
-                            }) {
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .font(.system(size: 22))  // Stessa dimensione
-                                    .foregroundStyle(.secondary)
-                                    .symbolRenderingMode(.hierarchical)
-                            }
-                        }
-                        
-                        // Bottone 3: Help
-                        Button(action: { showingHelp = true }) {
-                            Image(systemName: "questionmark.circle.fill")
-                                .font(.system(size: 22))  // Stessa dimensione
-                                .foregroundStyle(.blue)
-                                .symbolRenderingMode(.hierarchical)
-                        }
-                    }
-                    .buttonStyle(.plain)  // Rimuove l'effetto di default
+
+            // ── App Bar ──────────────────────────────
+            AppBar(
+                resultCount: hasSearched ? results.count : nil,
+                showScrollTop: !results.isEmpty,
+                onScrollTop: { scrollToTopTrigger.toggle() },
+                onHelp: { showingHelp = true },
+                maxLengthText: (results.isEmpty ? nil : String(results.max(by: { $0.word.count < $1.word.count })?.word.count ?? 0)),
+                averageText: (results.isEmpty ? nil : String(format: "%.1f", (Double(results.reduce(0) { $0 + $1.word.count }) / Double(results.count))))
+            )
+
+            // ── Search Row ───────────────────────────
+            SearchRow(
+                searchText: $searchText,
+                hasResults: !results.isEmpty,
+                hasSearched: hasSearched,
+                searchAsYouType: searchAsYouType,
+                onSearch: performSearch,
+                onReset: {
+                    results = []
+                    hasSearched = false
                 }
-                .padding(10)
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
-            }
-            .background(.ultraThinMaterial)
-            
-            // parametri di ricerca
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ControlCapsule(title: "Solo 100%", icon: "target", isActive: fullMatchesOnly, activeColor: .green) {
-                        fullMatchesOnly.toggle()
-                    }
-                    
-                    ControlCapsule(title: "Ricerca Live", icon: "bolt.fill", isActive: searchAsYouType, activeColor: .blue) {
-                        searchAsYouType.toggle()
-                    }
-                    
-                    ControlCapsule(title: "Avanzata", icon: "arrow.triangle.branch", isActive: deepSearchEnabled, activeColor: .purple) {
-                        deepSearchEnabled.toggle()
-                    }
-                    
-                    MinLengthControl(minLength: $minLength)
-                }
-                .padding(.horizontal)
-            }
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-            
-            // --- LIST ---
+            )
+
+            // ── Controls Row ─────────────────────────
+            ControlsRow(
+                fullMatchesOnly: $fullMatchesOnly,
+                searchAsYouType: $searchAsYouType,
+                deepSearchEnabled: $deepSearchEnabled,
+                minLength: $minLength
+            )
+
+            // ── Results / Empty state ─────────────────
             if results.isEmpty {
                 EmptyStateView(searchText: searchText, minLength: minLength)
             } else {
@@ -203,19 +448,16 @@ struct ContentView: View {
                                         onShowSheet: { title, matches in
                                             leftoverSheetItem = LeftoverPresentation(title: title, words: matches)
                                         },
-                                        onWordTapped: { word in
-                                            definitionTerm = word
-                                        }
+                                        onWordTapped: { word in definitionTerm = word }
                                     )
-                                    .id(result.id)  // assegna ID per scroll to top
+                                    .id(result.id)
                                 }
                             }
                         }
                     }
                     .listStyle(.insetGrouped)
                     .onChange(of: scrollToTopTrigger) { _, _ in
-                        if let firstSection = groupedResults.first,
-                           let firstItem = firstSection.items.first {
+                        if let firstItem = groupedResults.first?.items.first {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 proxy.scrollTo(firstItem.id, anchor: .top)
                             }
@@ -223,11 +465,11 @@ struct ContentView: View {
                     }
                 }
             }
-            
-            // --- FOOTER STATS ---
-            if !results.isEmpty {
-                StatsBar(results: results)
-            }
+        }
+        .safeAreaInset(edge: .top) {
+            // Add a spacer matching the app bar background so content starts below the status bar
+            Color(hex: "#0C1B2E").frame(height: 0)
+                .background(Color(hex: "#0C1B2E").ignoresSafeArea(edges: .top))
         }
         .sheet(item: $leftoverSheetItem) { item in
             LeftoverSheet(title: item.title, words: item.words)
@@ -237,24 +479,20 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: Binding<Bool>(
             get: { definitionTerm != nil },
-            set: { newValue in if !newValue { definitionTerm = nil } }
+            set: { if !$0 { definitionTerm = nil } }
         )) {
             if let term = definitionTerm {
                 DictionaryDefinitionView(term: term)
             }
         }
         .onAppear { loadInitialData() }
-        .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
-        .onChange(of: minLength) { _, _ in performSearch() }
-        .onChange(of: deepSearchEnabled) { _, newValue in
-            if newValue { triggerDeepSearch() }
-        }
-        .onChange(of: searchText) { _, newValue in
-            handleSearchTextChange(newValue)
-        }
+        .onChange(of: fullMatchesOnly)    { _, _ in performSearch() }
+        .onChange(of: minLength)          { _, _ in performSearch() }
+        .onChange(of: deepSearchEnabled)  { _, newValue in if newValue { triggerDeepSearch() } }
+        .onChange(of: searchText)         { _, newValue in handleSearchTextChange(newValue) }
     }
 
-    // ─── Logic ───
+    // ─── Logic ───────────────────────────────────
 
     private func performSearch() {
         let input = searchText.uppercased().replacingOccurrences(of: " ", with: "")
@@ -269,23 +507,21 @@ struct ContentView: View {
 
         for word in allWordsCache {
             if word == input || word.count < minLength { continue }
-            let wordLetters = Array(word)
             var tempCounts = inputCounts
             var canMake = true
-            for char in wordLetters {
-                if let count = tempCounts[char], count > 0 { tempCounts[char]! -= 1 } else { canMake = false; break }
+            for char in Array(word) {
+                if let count = tempCounts[char], count > 0 { tempCounts[char]! -= 1 }
+                else { canMake = false; break }
             }
+            guard canMake else { continue }
 
-            if canMake {
-                let leftover = tempCounts.flatMap { Array(repeating: $0.key, count: $0.value) }
-                    .sorted()
-                    .map(String.init)
-                    .joined()
-                let isFull = leftover.isEmpty && word.count == input.count
-                if fullMatchesOnly && !isFull { continue }
+            let leftover = tempCounts
+                .flatMap { Array(repeating: $0.key, count: $0.value) }
+                .sorted().map(String.init).joined()
+            let isFull = leftover.isEmpty && word.count == input.count
+            if fullMatchesOnly && !isFull { continue }
 
-                output.append(MatchResult(word: word, isFullMatch: isFull, leftover: leftover, usedLetterCount: word.count))
-            }
+            output.append(MatchResult(word: word, isFullMatch: isFull, leftover: leftover, usedLetterCount: word.count))
         }
 
         results = output.sorted {
@@ -303,7 +539,9 @@ struct ContentView: View {
     }
 
     private func loadLeftover(_ leftover: String) {
-        guard leftover.count >= 2, leftoverCache[leftover] == nil, !loadingLeftovers.contains(leftover) else { return }
+        guard leftover.count >= 2,
+              leftoverCache[leftover] == nil,
+              !loadingLeftovers.contains(leftover) else { return }
         loadingLeftovers.insert(leftover)
         DispatchQueue.global(qos: .userInitiated).async {
             let matches = WordDatabase.shared.exactMatches(using: leftover)
@@ -329,12 +567,35 @@ struct ContentView: View {
             let work = DispatchWorkItem { performSearch() }
             liveSearchWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
-        } else { hasSearched = false }
+        } else {
+            // In modalità non-Live, quando l'utente modifica il testo, resetta i risultati
+            // così il bottone "Cerca" è necessario per vedere nuovi risultati
+            if hasSearched {
+                results = []
+                hasSearched = false
+            }
+        }
     }
 }
 
 // ─────────────────────────────────────────────
-// MARK: - Subviews
+// MARK: - Hex Color helper
+// ─────────────────────────────────────────────
+
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let red = Double((int >> 16) & 0xFF) / 255
+        let green = Double((int >> 8)  & 0xFF) / 255
+        let blue = Double(int         & 0xFF) / 255
+        self.init(red: red, green: green, blue: blue)
+    }
+}
+
+// ─────────────────────────────────────────────
+// MARK: - Subviews (invariati)
 // ─────────────────────────────────────────────
 
 struct ResultRow: View {
@@ -348,9 +609,7 @@ struct ResultRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button {
-                onWordTapped(result.word)
-            } label: {
+            Button { onWordTapped(result.word) } label: {
                 Text(result.word)
                     .font(.system(.subheadline, design: .monospaced))
                     .foregroundStyle(.primary)
@@ -363,8 +622,8 @@ struct ResultRow: View {
                 let matches = leftoverCache[result.leftover]
                 let hasMatches = !(matches?.isEmpty ?? true)
                 let isPurple = deepSearchEnabled && hasMatches
-                Text("+")
-                    .font(.system(.caption2, design: .monospaced))
+
+                Text("+").font(.system(.caption2, design: .monospaced))
 
                 Button {
                     guard isPurple, let matches, !matches.isEmpty else { return }
@@ -387,152 +646,18 @@ struct ResultRow: View {
             }
 
             if result.isFullMatch {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
             }
-        }
-    }
-}
-
-struct ControlCapsule: View {
-    let title: String
-    let icon: String
-    let isActive: Bool
-    let activeColor: Color
-    let action: () -> Void
-    
-    private var inactiveBackground: Color {
-        Color.primary.opacity(0.06)
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.system(size: 14, weight: .bold))
-                
-                Text(title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background {
-                if isActive {
-                    activeColor.opacity(0.12)
-                } else {
-                    inactiveBackground
-                }
-            }
-            .foregroundStyle(isActive ? activeColor : .primary.opacity(0.7))
-            .clipShape(Capsule())
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        isActive ? activeColor.opacity(0.5) : .primary.opacity(0.1),
-                        lineWidth: 1.5
-                    )
-            }
-            .shadow(color: isActive ? activeColor.opacity(0.2) : .clear, radius: 4, x: 0, y: 2)
-        }
-        .buttonStyle(ScaledButtonStyle())
-        .sensoryFeedback(.impact(weight: .light), trigger: isActive)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
-    }
-}
-
-struct ScaledButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .opacity(configuration.isPressed ? 0.9 : 1.0)
-    }
-}
-
-struct StepperButton: View {
-    let icon: String; let enabled: Bool; let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.footnote.weight(.semibold))
-                .frame(width: 24, height: 24)
-                .background(Color(.systemGray5))
-                .foregroundStyle(enabled ? Color.primary : Color.secondary)
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-}
-
-struct StatsBar: View {
-    let results: [MatchResult]
-    
-    var averageLength: Double {
-        guard !results.isEmpty else { return 0 }
-        let total = results.reduce(0) { $0 + $1.word.count }
-        return Double(total) / Double(results.count)
-    }
-
-    var body: some View {
-        let content = HStack(alignment: .center) {
-            StatItem(
-                value: "\(results.count)",
-                label: "Trovate"
-            )
-            
-            Spacer()
-            Divider().frame(height: 20).opacity(0.5)
-            Spacer()
-
-            let maxLen = results.max(by: { $0.word.count < $1.word.count })?.word.count ?? 0
-            StatItem(
-                value: "\(maxLen)",
-                label: "Lun. Max"
-            )
-
-            if !results.isEmpty {
-                Spacer()
-                Divider().frame(height: 20).opacity(0.5)
-                Spacer()
-
-                StatItem(
-                    value: String(format: "%.1f", averageLength),
-                    label: "Media"
-                )
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-
-        return content
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-    }
-}
-
-struct StatItem: View {
-    let value: String
-    let label: String
-    
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(.body, design: .monospaced).bold())
-                .foregroundStyle(.primary)
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.secondary)
         }
     }
 }
 
 struct LeftoverSheet: View {
-    let title: String; let words: [String]
+    let title: String
+    let words: [String]
     @State private var selectedTerm: String?
-    @State private var showNoDefinitionAlert = false
-    @State private var lastMissingTerm: String = ""
 
     var body: some View {
         NavigationStack {
@@ -546,77 +671,37 @@ struct LeftoverSheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            .navigationTitle("Match per: \(title)")
+            .navigationTitle("Risultati per: \(title)")
             .navigationBarTitleDisplayMode(.inline)
         }
         .fullScreenCover(isPresented: Binding<Bool>(
             get: { selectedTerm != nil },
-            set: { newValue in if !newValue { selectedTerm = nil } }
+            set: { if !$0 { selectedTerm = nil } }
         )) {
-            if let term = selectedTerm {
-                DictionaryDefinitionView(term: term)
-            }
+            if let term = selectedTerm { DictionaryDefinitionView(term: term) }
         }
-//        .alert("Nessuna definizione trovata", isPresented: $showNoDefinitionAlert, actions: {
-//            Button("Cerca sul web") {
-//                let query = lastMissingTerm.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? lastMissingTerm
-//                if let url = URL(string: "https://www.google.com/search?q=\(query)") {
-//                    UIApplication.shared.open(url)
-//                }
-//            }
-//            Button("OK", role: .cancel) { }
-//        }, message: {
-//            Text("\"\(lastMissingTerm)\" non è presente nel dizionario.")
-//        })
     }
 }
 
 struct EmptyStateView: View {
-    let searchText: String; let minLength: Int
+    let searchText: String
+    let minLength: Int
+
     var body: some View {
         VStack {
             Spacer()
             Image(systemName: searchText.isEmpty ? "text.magnifyingglass" : "questionmark.circle")
-                .font(.system(size: 50)).foregroundStyle(.quaternary).padding(.bottom, 8)
-            Text(searchText.isEmpty ? "Inserisci le lettere da anagrammare\n(minimo \(minLength))" : "Nessun risultato")
+                .font(.system(size: 50))
+                .foregroundStyle(.quaternary)
+                .padding(.bottom, 8)
+            Text(searchText.isEmpty
+                 ? "Inserisci le lettere da anagrammare\n(minimo \(minLength))"
+                 : "Nessun risultato")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Spacer()
         }
-    }
-}
-
-struct MinLengthControl: View {
-    @Binding var minLength: Int
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "textformat.size")
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 14, weight: .bold))
-
-            Text("Lunghezza Min.")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-
-            Text("\(minLength)")
-                .font(.subheadline.monospacedDigit().weight(.medium))
-                .padding(.leading, 2)
-
-            Stepper("", value: $minLength, in: 3...15)
-                .labelsHidden()
-                .controlSize(.mini)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 3)
-        .background(Color.primary.opacity(0.06))
-        .foregroundStyle(.primary.opacity(0.7))
-        .clipShape(Capsule())
-        .overlay {
-            Capsule()
-                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1.5)
-        }
-        .shadow(color: .clear, radius: 4, x: 0, y: 2)
     }
 }
 
