@@ -2,3 +2,4 @@
 /CercAnagrammi/Resources/Words.db*
 /CercAnagrammi/Resources/*.db-wal
 /CercAnagrammi/Resources/*.db-shm
+/Risorse/*

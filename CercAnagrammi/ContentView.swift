@@ -80,7 +80,7 @@ struct ContentView: View {
     @State private var liveSearchWorkItem: DispatchWorkItem?
     
     @State private var showingHelp = false
-    @State private var definitionTerm: String? = nil
+    @State private var definitionTerm: String? 
     @State private var scrollToTopTrigger = false
 
     private struct LeftoverPresentation: Identifiable {
