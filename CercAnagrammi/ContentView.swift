@@ -2,6 +2,36 @@ import SwiftUI
 import SQLite3
 import UIKit
 
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let red   = Double((int >> 16) & 0xFF) / 255
+        let green = Double((int >> 8)  & 0xFF) / 255
+        let blue  = Double(int         & 0xFF) / 255
+        self.init(red: red, green: green, blue: blue)
+    }
+
+    // Backgrounds
+    static let steelBase    = Color(hex: "#0C1B2E")
+    static let steelSurface = Color(hex: "#0F2236")
+    static let steelCard    = Color(hex: "#122840")
+    static let steelBorder  = Color(hex: "#1E3D5C")
+
+    // Accents
+    static let accentBlue   = Color(hex: "#378ADD")
+    static let accentGreen  = Color(hex: "#4CAF8A")
+//    static let accentViolet = Color(hex: "#8B7EC8")
+    static let accentViolet = Color(hex: "#9789D9")
+    static let accentGold   = Color(hex: "#C9A84C")
+
+    // Text
+    static let textPrimary   = Color(hex: "#E6F1FB")
+    static let textSecondary = Color(hex: "#6B8FAD")
+    static let textMuted     = Color(hex: "#3A5A7A")
+}
+
 // ─────────────────────────────────────────────
 // MARK: - Database
 // ─────────────────────────────────────────────
@@ -15,7 +45,6 @@ final class WordDatabase {
         sqlite3_open_v2(bundlePath, &database, SQLITE_OPEN_READONLY, nil)
     }
 
-    // accetta minLength e lo applica nella query SQL
     func exactMatches(using letters: String, minLength: Int = 4) -> [String] {
         return dbQueue.sync {
             guard let database else { return [] }
@@ -36,7 +65,6 @@ final class WordDatabase {
         }
     }
 
-    // pre-filtra a >= 4 hardcoded (minLength assoluto)
     func allWords(minLength: Int = 4) -> [String] {
         return dbQueue.sync {
             guard let database else { return [] }
@@ -56,8 +84,11 @@ final class WordDatabase {
     }
 }
 
+// ─────────────────────────────────────────────
+// MARK: - Models
+// ─────────────────────────────────────────────
 struct MatchResult: Identifiable {
-    let id: String // per evitare l'overheade delle allocazioni UID
+    let id: String
     let word: String
     let isFullMatch: Bool
     let leftover: String
@@ -68,12 +99,11 @@ struct MatchResult: Identifiable {
 // MARK: - App Bar
 // ─────────────────────────────────────────────
 struct AppBar: View {
-    
+
     let resultCount: Int?
     let showScrollTop: Bool
     let onScrollTop: () -> Void
     let onHelp: () -> Void
-    
     let maxLengthText: String?
     let averageText: String?
     let isCapped: Bool
@@ -82,72 +112,79 @@ struct AppBar: View {
         let base: String = {
             guard let count = resultCount else { return "" }
             switch count {
-            case 0: return "Nessuna parola trovata"
-            case 1: return isCapped ? "Prima parola (risultati troncati)" : "1 parola trovata"
+            case 0:  return "Nessuna parola trovata"
+            case 1:  return isCapped ? "Prima parola (risultati troncati)" : "1 parola trovata"
             default: return isCapped ? "Prime \(count) parole" : "\(count) parole trovate"
             }
         }()
         if let maxLengthText, let averageText, resultCount != nil, resultCount! > 0 {
-            return "\(base) • Lun. Max: \(maxLengthText) • Media: \(averageText)"
-        } else {
-            return base
+            return "\(base) • Max: \(maxLengthText) • Media: \(averageText)"
         }
+        return base
     }
 
     private var subtitleColor: Color {
-        guard let count = resultCount else { return Color(hex: "#378ADD") }
-        if count == 0 { return Color(hex: "#F09595") }
-        if isCapped { return Color(hex: "#EF9F27") }
-        return Color(hex: "#5DCAA5")
+        guard let count = resultCount else { return .accentBlue }
+        if count == 0 { return Color(hex: "#C0504A") }
+        if isCapped { return Color(hex: "#C9943A") }
+        return .accentGreen
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("CercAnagramma")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(Color(hex: "#E6F1FB"))
+        HStack(alignment: .center, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("CercAnagrammi")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.textPrimary)
 
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(subtitleColor)
-                    .animation(.easeInOut(duration: 0.2), value: subtitle)
+                if resultCount != nil {
+                    Text(subtitle)
+                       // .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(subtitleColor)
+                        .animation(.easeInOut(duration: 0.2), value: subtitle)
+                }
             }
 
             Spacer()
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 if showScrollTop {
-                    AppBarButton(icon: "arrow.up.to.line", action: onScrollTop)
+                    SteelBarButton(icon: "arrow.up.to.line", action: onScrollTop)
                         .transition(.scale(scale: 0.7).combined(with: .opacity))
                 }
-                AppBarButton(icon: "questionmark", action: onHelp)
+                SteelBarButton(icon: "questionmark", action: onHelp)
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showScrollTop)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.top, 10)
         .padding(.bottom, 12)
-        .background(Color(hex: "#0C1B2E"))
+        .background(Color.steelBase)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.steelBorder.opacity(0.6))
+                .frame(height: 0.5)
+        }
     }
 }
 
-struct AppBarButton: View {
+struct SteelBarButton: View {
     let icon: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 32, height: 32)
-                .background(Color.white.opacity(0.08))
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(Color.steelCard)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                        .strokeBorder(Color.steelBorder, lineWidth: 0.5)
                 )
-                .foregroundStyle(Color.white.opacity(0.55))
+                .foregroundStyle(Color.textSecondary)
         }
         .buttonStyle(.plain)
     }
@@ -165,52 +202,56 @@ struct SearchRow: View {
     let onSearch: () -> Void
     let onReset: () -> Void
 
-    private var isSearchDisabled: Bool {
-        searchText.isEmpty
-    }
+    private var isSearchDisabled: Bool { searchText.isEmpty }
 
     var body: some View {
         HStack(spacing: 8) {
+
+            // ── Input field ──────────────────────────
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.textMuted)
 
                 TextField("Scrivi qui…", text: $searchText)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled(true)
                     .submitLabel(.search)
-                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.textPrimary)
+                    .tint(Color.accentBlue)
                     .onSubmit {
-                        if !searchText.isEmpty {
-                            onSearch()
-                        }
+                        if !searchText.isEmpty { onSearch() }
                     }
 
                 if !searchText.isEmpty {
                     let letterCount = searchText.filter { $0.isLetter }.count
-                    let isAtLimit = letterCount >= maxLetters
+                    let isAtLimit   = letterCount >= maxLetters
 
                     Text("\(letterCount)")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(isAtLimit ? .white : .secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(isAtLimit ? Color.red : Color(.systemGray6))
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(isAtLimit ? Color.textPrimary : Color.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(isAtLimit ? Color(hex: "#7A2020") : Color.steelCard)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(isAtLimit ? Color.red.opacity(0.6) : Color.clear, lineWidth: 1)
+                                .strokeBorder(
+                                    isAtLimit ? Color(hex: "#C0504A").opacity(0.7) : Color.steelBorder,
+                                    lineWidth: 0.5
+                                )
                         )
                         .scaleEffect(isAtLimit ? 1.08 : 1.0)
                         .animation(.easeInOut(duration: 0.18), value: isAtLimit)
+
                     Button {
                         searchText = ""
                         onReset()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Color(.systemGray3))
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.textMuted)
                     }
                     .buttonStyle(.plain)
                     .transition(.scale.combined(with: .opacity))
@@ -218,23 +259,34 @@ struct SearchRow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(.systemBackground))
+            .background(Color.steelCard)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5)
+                    .strokeBorder(Color.steelBorder, lineWidth: 0.5)
             )
             .animation(.easeInOut(duration: 0.15), value: searchText.isEmpty)
 
-            Button {
-                onSearch()
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 40, height: 40)
-                    .background(isSearchDisabled ? Color(.systemGray4) : Color(hex: "#185FA5"))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            // ── Search button ────────────────────────
+            Button { onSearch() } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSearchDisabled
+                              ? Color.steelCard
+                              : Color.accentBlue.opacity(0.85))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(
+                                    isSearchDisabled ? Color.steelBorder : Color.accentBlue,
+                                    lineWidth: 0.5
+                                )
+                        )
+
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(isSearchDisabled ? Color.textMuted : Color.textPrimary)
+                }
+                .frame(width: 42, height: 42)
             }
             .buttonStyle(.plain)
             .disabled(isSearchDisabled)
@@ -242,7 +294,7 @@ struct SearchRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.steelSurface)
     }
 }
 
@@ -258,104 +310,95 @@ struct ControlsRow: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ControlChip(
-                    title: "Solo 100%",
-                    isActive: fullMatchesOnly,
-                    activeColor: .green
-                ) { fullMatchesOnly.toggle() }
+                SteelChip(title: "Solo 100%", isActive: fullMatchesOnly, activeColor: .accentGreen) { fullMatchesOnly.toggle() }
+                SteelChip(title: "Live", isActive: searchAsYouType, activeColor: .accentBlue) { searchAsYouType.toggle() }
+                SteelChip(title: "Avanzata", isActive: deepSearchEnabled, activeColor: .accentViolet) { deepSearchEnabled.toggle() }
 
-                ControlChip(
-                    title: "Live",
-                    isActive: searchAsYouType,
-                    activeColor: .blue
-                ) { searchAsYouType.toggle() }
-
-                ControlChip(
-                    title: "Avanzata",
-                    isActive: deepSearchEnabled,
-                    activeColor: .purple
-                ) { deepSearchEnabled.toggle() }
-
-                Divider()
-                    .frame(height: 18)
+                Rectangle()
+                    .fill(Color.steelBorder)
+                    .frame(width: 0.5, height: 18)
                     .padding(.horizontal, 2)
 
-                HStack(spacing: 5) {
-                    Button { if minLength > 4 { minLength -= 1 } } label: {
-                        Image(systemName: "minus")
-                            .font(.system(size: 10, weight: .semibold))
-                            .frame(width: 20, height: 20)
-                            .background(Color(.systemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 5))
-                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5))
-                            .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    StepperButton(icon: "minus", disabled: minLength <= 4) {
+                        if minLength > 4 { minLength -= 1 }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(minLength <= 4)
 
                     Text("Min \(minLength)")
-                        .font(.system(size: 12, weight: .medium).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(minWidth: 44)
 
-                    Button { if minLength < 15 { minLength += 1 } } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .semibold))
-                            .frame(width: 20, height: 20)
-                            .background(Color(.systemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 5))
-                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5))
-                            .foregroundStyle(.secondary)
+                    StepperButton(icon: "plus", disabled: minLength >= 15) {
+                        if minLength < 15 { minLength += 1 }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(minLength >= 15)
                 }
                 .sensoryFeedback(.selection, trigger: minLength)
             }
             .padding(.horizontal, 14)
         }
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
+        .padding(.vertical, 9)
+        .background(Color.steelSurface)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color(.separator).opacity(0.4))
+                .fill(Color.steelBorder.opacity(0.5))
                 .frame(height: 0.5)
         }
     }
 }
 
-struct ControlChip: View {
+struct SteelChip: View {
     let title: String
     let isActive: Bool
     let activeColor: Color
     let action: () -> Void
 
-    private var bgColor: Color {
-        isActive ? activeColor.opacity(0.12) : Color(.systemBackground)
-    }
-    private var fgColor: Color {
-        isActive ? activeColor : Color.secondary
-    }
-    private var borderColor: Color {
-        isActive ? activeColor.opacity(0.4) : Color(.separator).opacity(0.5)
-    }
-
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(fgColor)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isActive ? activeColor : Color.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(bgColor)
+                .background(isActive ? activeColor.opacity(0.14) : Color.steelCard)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(borderColor, lineWidth: 0.5)
+                        .strokeBorder(
+                            isActive ? activeColor.opacity(0.45) : Color.steelBorder,
+                            lineWidth: 0.5
+                        )
                 )
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: isActive)
         .animation(.easeInOut(duration: 0.15), value: isActive)
+    }
+}
+
+struct StepperButton: View {
+    let icon: String
+    let disabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 22, height: 22)
+                .background(disabled ? Color.clear : Color.steelCard)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(
+                            disabled ? Color.steelBorder.opacity(0.3) : Color.steelBorder,
+                            lineWidth: 0.5
+                        )
+                )
+                .foregroundStyle(disabled ? Color.textMuted : Color.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 }
 
@@ -367,7 +410,7 @@ struct ContentView: View {
     @State private var results: [MatchResult] = []
     @State private var searchAsYouType = false
     @State private var fullMatchesOnly = true
-    @State private var minLength: Int = 4
+    @State private var minLength: Int = 5
     @State private var deepSearchEnabled = false
     @State private var hasSearched = false
 
@@ -407,8 +450,8 @@ struct ContentView: View {
                 showScrollTop: !results.isEmpty,
                 onScrollTop: { scrollToTopTrigger.toggle() },
                 onHelp: { showingHelp = true },
-                maxLengthText: (results.isEmpty ? nil : String(results.max(by: { $0.word.count < $1.word.count })?.word.count ?? 0)),
-                averageText: (results.isEmpty ? nil : String(format: "%.1f", (Double(results.reduce(0) { $0 + $1.word.count }) / Double(results.count)))),
+                maxLengthText: results.isEmpty ? nil : String(results.max(by: { $0.word.count < $1.word.count })?.word.count ?? 0),
+                averageText: results.isEmpty ? nil : String(format: "%.1f", Double(results.reduce(0) { $0 + $1.word.count }) / Double(results.count)),
                 isCapped: resultsWereCapped
             )
 
@@ -438,7 +481,11 @@ struct ContentView: View {
                 ScrollViewReader { proxy in
                     List {
                         ForEach(groupedResults, id: \.count) { section in
-                            Section(header: Text("\(section.count) lettere")) {
+                            Section(
+                                header: Text("\(section.count) Lettere")
+                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Color.textSecondary)
+                            ) {
                                 ForEach(section.items) { result in
                                     ResultRow(
                                         result: result,
@@ -452,11 +499,14 @@ struct ContentView: View {
                                         onWordTapped: { word in definitionTerm = word }
                                     )
                                     .id(result.id)
+                                    .listRowBackground(Color.steelCard)
                                 }
                             }
                         }
                     }
                     .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.steelBase)
                     .onChange(of: scrollToTopTrigger) { _, _ in
                         if let firstItem = groupedResults.first?.items.first {
                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -467,9 +517,10 @@ struct ContentView: View {
                 }
             }
         }
+        .background(Color.steelBase)
         .safeAreaInset(edge: .top) {
-            Color(hex: "#0C1B2E").frame(height: 0)
-                .background(Color(hex: "#0C1B2E").ignoresSafeArea(edges: .top))
+            Color.steelBase.frame(height: 0)
+                .background(Color.steelBase.ignoresSafeArea(edges: .top))
         }
         .sheet(item: $leftoverSheetItem) { item in
             LeftoverSheet(title: item.title, words: item.words)
@@ -487,10 +538,7 @@ struct ContentView: View {
         }
         .onAppear { loadInitialData() }
         .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
-        .onChange(of: minLength) { _, _ in
-            leftoverCache = [:] // svuota la cache degli avanzi se cambia il min len.
-            performSearch()
-        }
+        .onChange(of: minLength) { _, _ in leftoverCache = [:]; performSearch() }
         .onChange(of: deepSearchEnabled) { _, newValue in if newValue { triggerDeepSearch() } }
         .onChange(of: searchText) { _, newValue in handleSearchTextChange(newValue) }
     }
@@ -556,14 +604,13 @@ struct ContentView: View {
         hasSearched = true
         if deepSearchEnabled { triggerDeepSearch() }
     }
-    
+
     private func triggerDeepSearch() {
         for result in results where result.leftover.count >= 2 {
             loadLeftover(result.leftover)
         }
     }
 
-    // passa minLength alla query SQL
     private func loadLeftover(_ leftover: String) {
         guard leftover.count >= 2,
               leftoverCache[leftover] == nil,
@@ -579,7 +626,6 @@ struct ContentView: View {
         }
     }
 
-    // pre-filtra a >= 4 hardcoded (costante assoluta)
     private func loadInitialData() {
         DispatchQueue.global(qos: .userInitiated).async {
             let words = WordDatabase.shared.allWords(minLength: 4)
@@ -588,17 +634,12 @@ struct ContentView: View {
     }
 
     private func handleSearchTextChange(_ newValue: String) {
-        //  pulisci il testo (solo lettere e spazi)
         let cleaned = newValue.uppercased().filter { $0.isLetter || $0 == " " }
-        
-        // Conta solo le lettere per il limite
         let letterCount = cleaned.filter { $0.isLetter }.count
-        
-        // Se supera il limite di lettere, tronca mantenendo le prime maxLetters lettere
+
         if letterCount > maxLetters {
             var result = ""
             var lettersAdded = 0
-            
             for char in cleaned {
                 if char.isLetter {
                     if lettersAdded < maxLetters {
@@ -606,20 +647,15 @@ struct ContentView: View {
                         lettersAdded += 1
                     }
                 } else if char == " " {
-                    // Le spazio possono rimanere, ma non contano per il limite
                     result.append(char)
                 }
             }
             searchText = result
             return
         }
-        
-        // Aggiorna solo se diverso
-        if cleaned != newValue {
-            searchText = cleaned
-        }
-        
-        // Gestisci la ricerca live
+
+        if cleaned != newValue { searchText = cleaned }
+
         if searchAsYouType {
             liveSearchWorkItem?.cancel()
             let work = DispatchWorkItem { performSearch() }
@@ -631,18 +667,6 @@ struct ContentView: View {
                 hasSearched = false
             }
         }
-    }
-}
-
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let red = Double((int >> 16) & 0xFF) / 255
-        let green = Double((int >> 8)  & 0xFF) / 255
-        let blue = Double(int         & 0xFF) / 255
-        self.init(red: red, green: green, blue: blue)
     }
 }
 
@@ -663,7 +687,7 @@ struct ResultRow: View {
             Button { onWordTapped(result.word) } label: {
                 Text(result.word)
                     .font(.system(.subheadline, design: .monospaced))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.textPrimary)
             }
             .buttonStyle(.plain)
 
@@ -674,23 +698,33 @@ struct ResultRow: View {
                 let hasMatches = !(matches?.isEmpty ?? true)
                 let isPurple = deepSearchEnabled && hasMatches
 
-                Text("+").font(.system(.caption2, design: .monospaced))
+                Text("+")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(Color.textMuted)
 
                 Button {
                     guard isPurple, let matches, !matches.isEmpty else { return }
                     onShowSheet(result.leftover, matches)
                 } label: {
                     HStack(spacing: 4) {
-                        Text(result.leftover).font(.system(.caption, design: .monospaced))
+                        Text(result.leftover)
+                            .font(.system(.caption, design: .monospaced))
                         if deepSearchEnabled && loadingLeftovers.contains(result.leftover) {
                             ProgressView().scaleEffect(0.6)
                         }
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(isPurple ? Color.purple.opacity(0.15) : Color(.secondarySystemBackground))
-                    .foregroundStyle(isPurple ? Color.purple : Color.secondary)
-                    .cornerRadius(6)
+                    .background(isPurple ? Color.accentViolet.opacity(0.15) : Color.steelBase)
+                    .foregroundStyle(isPurple ? Color.accentViolet : Color.textSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(
+                                isPurple ? Color.accentViolet.opacity(0.4) : Color.steelBorder,
+                                lineWidth: 0.5
+                            )
+                    )
                 }
                 .buttonStyle(.plain)
                 .onAppear { if deepSearchEnabled { onLoadLeftover(result.leftover) } }
@@ -698,7 +732,7 @@ struct ResultRow: View {
 
             if result.isFullMatch {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentGold)
                     .font(.caption)
             }
         }
@@ -718,10 +752,14 @@ struct LeftoverSheet: View {
                 } label: {
                     Text(word)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.textPrimary)
                 }
                 .buttonStyle(.plain)
+                .listRowBackground(Color.steelCard)
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(Color.steelBase)
             .navigationTitle("Risultati per: \(title)")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -743,16 +781,18 @@ struct EmptyStateView: View {
             Spacer()
             Image(systemName: searchText.isEmpty ? "text.magnifyingglass" : "questionmark.circle")
                 .font(.system(size: 50))
-                .foregroundStyle(.quaternary)
+                .foregroundStyle(Color.textMuted)
                 .padding(.bottom, 8)
             Text(searchText.isEmpty
                  ? "Inserisci le lettere da anagrammare\n(minimo \(minLength))"
                  : "Nessun risultato")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
             Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.steelBase)
     }
 }
 

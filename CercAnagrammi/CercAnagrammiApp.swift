@@ -16,6 +16,7 @@ struct CercAnagrammiApp: App {
                         .transition(.opacity)
                 }
             }
+            .preferredColorScheme(.dark)
         }
     }
 }
