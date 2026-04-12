@@ -10,14 +10,14 @@ struct SplashScreenView: View {
         ZStack {
             
             if horizontalSizeClass == .compact {
-                Image("CercAnagrammi_Splash_iPhone")
+                Image("Dark iPhone")
                     .resizable()
                     .scaledToFill()
                     .ignoresSafeArea(.all)
             }
             
             if horizontalSizeClass == .regular {
-                Image("CercAnagrammi_Splash_iPad")
+                Image("Dark iPad")
                     .resizable()
                     .scaledToFill()
                     .ignoresSafeArea(.all)
@@ -29,27 +29,21 @@ struct SplashScreenView: View {
                 // Finta progress bar
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
-                        // Sfondo della progress bar
+                        // Sfondo della progress bar (più scuro per contrasto)
                         Rectangle()
                             .frame(width: 200, height: 4)
-                            .foregroundColor(.white.opacity(0.3))
+                            .foregroundColor(.white.opacity(0.2))
                             .cornerRadius(2)
                         
-                        // Progresso che si riempie
+                        // Progresso che si riempie (bianco brillante)
                         Rectangle()
                             .frame(width: 200 * progress, height: 4)
-                            .foregroundColor(.black.opacity(0.7))
+                            .foregroundColor(.white.opacity(0.9))
                             .cornerRadius(2)
                     }
-                    
-                    // Testo percentuale (opzionale)
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption2)
-                        .foregroundColor(.black.opacity(0.6))
                 }
-                .padding(.bottom, 60)
                 
-                // Versione e build (come già presente)
+                // Versione e build (bianco per sfondo scuro)
                 HStack(spacing: 4) {
                     Text("Version:")
                     Text(Bundle.main.appVersionDisplay)
@@ -57,7 +51,7 @@ struct SplashScreenView: View {
                     Text(Bundle.main.appBuild)
                 }
                 .font(.footnote)
-                .foregroundStyle(.black)
+                .foregroundStyle(.white.opacity(0.7))
                 .padding(30)
                 .padding(.horizontal)
             }

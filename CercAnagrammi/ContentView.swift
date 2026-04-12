@@ -5,7 +5,6 @@ import UIKit
 // ─────────────────────────────────────────────
 // MARK: - Database
 // ─────────────────────────────────────────────
-
 final class WordDatabase {
     static let shared = WordDatabase()
     private var database: OpaquePointer?
@@ -16,15 +15,17 @@ final class WordDatabase {
         sqlite3_open_v2(bundlePath, &database, SQLITE_OPEN_READONLY, nil)
     }
 
-    func exactMatches(using letters: String) -> [String] {
+    // accetta minLength e lo applica nella query SQL
+    func exactMatches(using letters: String, minLength: Int = 4) -> [String] {
         return dbQueue.sync {
             guard let database else { return [] }
             let key = String(letters.uppercased().sorted())
-            let sql = "SELECT word FROM words WHERE sorted = ? ORDER BY word"
+            let sql = "SELECT word FROM words WHERE sorted = ? AND LENGTH(word) >= ? ORDER BY word"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
             defer { sqlite3_finalize(statement) }
             sqlite3_bind_text(statement, 1, (key as NSString).utf8String, -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(minLength))
             var results: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let cString = sqlite3_column_text(statement, 0) {
@@ -35,13 +36,15 @@ final class WordDatabase {
         }
     }
 
-    func allWords() -> [String] {
+    // pre-filtra a >= 4 hardcoded (minLength assoluto)
+    func allWords(minLength: Int = 4) -> [String] {
         return dbQueue.sync {
             guard let database else { return [] }
-            let sql = "SELECT word FROM words"
+            let sql = "SELECT word FROM words WHERE LENGTH(word) >= ?"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
             defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int(statement, 1, Int32(minLength))
             var results: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let cString = sqlite3_column_text(statement, 0) {
@@ -54,7 +57,7 @@ final class WordDatabase {
 }
 
 struct MatchResult: Identifiable {
-    let id = UUID()
+    let id: String // per evitare l'overheade delle allocazioni UID
     let word: String
     let isFullMatch: Bool
     let leftover: String
@@ -64,30 +67,26 @@ struct MatchResult: Identifiable {
 // ─────────────────────────────────────────────
 // MARK: - App Bar
 // ─────────────────────────────────────────────
-
-/// La barra superiore scura con titolo, sottotitolo contestuale e azioni.
 struct AppBar: View {
     
-    let resultCount: Int?          // nil = nessuna ricerca ancora
+    let resultCount: Int?
     let showScrollTop: Bool
     let onScrollTop: () -> Void
     let onHelp: () -> Void
     
     let maxLengthText: String?
     let averageText: String?
+    let isCapped: Bool
 
-    // Sottotitolo: feedback contestuale o etichetta fissa
     private var subtitle: String {
-        // Base: feedback sul numero di risultati, oppure etichetta fissa quando non si è ancora cercato
         let base: String = {
-            guard let count = resultCount else { return "" } // qui ci può stare un sottotitolo in attesa dei risultati
+            guard let count = resultCount else { return "" }
             switch count {
             case 0: return "Nessuna parola trovata"
-            case 1: return "1 parola trovata"
-            default: return "\(count) parole trovate"
+            case 1: return isCapped ? "Prima parola (risultati troncati)" : "1 parola trovata"
+            default: return isCapped ? "Prime \(count) parole" : "\(count) parole trovate"
             }
         }()
-        // Aggiungi statistiche se presenti
         if let maxLengthText, let averageText, resultCount != nil, resultCount! > 0 {
             return "\(base) • Lun. Max: \(maxLengthText) • Media: \(averageText)"
         } else {
@@ -97,7 +96,9 @@ struct AppBar: View {
 
     private var subtitleColor: Color {
         guard let count = resultCount else { return Color(hex: "#378ADD") }
-        return count == 0 ? Color(hex: "#F09595") : Color(hex: "#5DCAA5")
+        if count == 0 { return Color(hex: "#F09595") }
+        if isCapped { return Color(hex: "#EF9F27") }
+        return Color(hex: "#5DCAA5")
     }
 
     var body: some View {
@@ -155,24 +156,21 @@ struct AppBarButton: View {
 // ─────────────────────────────────────────────
 // MARK: - Search Row
 // ─────────────────────────────────────────────
-
-/// Barra di ricerca con campo, contatore lettere, ✕ interno e bottone azione.
 struct SearchRow: View {
     @Binding var searchText: String
     let hasResults: Bool
     let hasSearched: Bool
     let searchAsYouType: Bool
+    let maxLetters: Int
     let onSearch: () -> Void
     let onReset: () -> Void
 
-    // Opzione 3: bottone FA SOLO RICERCA, sempre
     private var isSearchDisabled: Bool {
         searchText.isEmpty
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            // Campo
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 13))
@@ -190,17 +188,22 @@ struct SearchRow: View {
                     }
 
                 if !searchText.isEmpty {
-                    // Contatore lettere (solo caratteri non-spazio)
                     let letterCount = searchText.filter { $0.isLetter }.count
-                    Text("\(letterCount)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    let isAtLimit = letterCount >= maxLetters
 
-                    // ✕ dentro il campo: reset COMPLETO (testo + risultati)
+                    Text("\(letterCount)")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(isAtLimit ? .white : .secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(isAtLimit ? Color.red : Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(isAtLimit ? Color.red.opacity(0.6) : Color.clear, lineWidth: 1)
+                        )
+                        .scaleEffect(isAtLimit ? 1.08 : 1.0)
+                        .animation(.easeInOut(duration: 0.18), value: isAtLimit)
                     Button {
                         searchText = ""
                         onReset()
@@ -223,7 +226,6 @@ struct SearchRow: View {
             )
             .animation(.easeInOut(duration: 0.15), value: searchText.isEmpty)
 
-            // Bottone azione: SOLO RICERCA (sempre icona lente)
             Button {
                 onSearch()
             } label: {
@@ -247,7 +249,6 @@ struct SearchRow: View {
 // ─────────────────────────────────────────────
 // MARK: - Controls Row
 // ─────────────────────────────────────────────
-
 struct ControlsRow: View {
     @Binding var fullMatchesOnly: Bool
     @Binding var searchAsYouType: Bool
@@ -279,9 +280,8 @@ struct ControlsRow: View {
                     .frame(height: 18)
                     .padding(.horizontal, 2)
 
-                // Controllo lunghezza minima
                 HStack(spacing: 5) {
-                    Button { if minLength > 3 { minLength -= 1 } } label: {
+                    Button { if minLength > 4 { minLength -= 1 } } label: {
                         Image(systemName: "minus")
                             .font(.system(size: 10, weight: .semibold))
                             .frame(width: 20, height: 20)
@@ -291,7 +291,7 @@ struct ControlsRow: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(minLength <= 3)
+                    .disabled(minLength <= 4)
 
                     Text("Min \(minLength)")
                         .font(.system(size: 12, weight: .medium).monospacedDigit())
@@ -362,7 +362,6 @@ struct ControlChip: View {
 // ─────────────────────────────────────────────
 // MARK: - Main View
 // ─────────────────────────────────────────────
-
 struct ContentView: View {
     @State private var searchText = ""
     @State private var results: [MatchResult] = []
@@ -387,6 +386,10 @@ struct ContentView: View {
         let words: [String]
     }
     @State private var leftoverSheetItem: LeftoverPresentation?
+    private let maxLetters = 25
+
+    private let resultsCap = 5000
+    @State private var resultsWereCapped = false
 
     private var groupedResults: [(count: Int, items: [MatchResult])] {
         let groups = Dictionary(grouping: results) { $0.usedLetterCount }
@@ -399,22 +402,22 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
 
-            // ── App Bar ──────────────────────────────
             AppBar(
                 resultCount: hasSearched ? results.count : nil,
                 showScrollTop: !results.isEmpty,
                 onScrollTop: { scrollToTopTrigger.toggle() },
                 onHelp: { showingHelp = true },
                 maxLengthText: (results.isEmpty ? nil : String(results.max(by: { $0.word.count < $1.word.count })?.word.count ?? 0)),
-                averageText: (results.isEmpty ? nil : String(format: "%.1f", (Double(results.reduce(0) { $0 + $1.word.count }) / Double(results.count))))
+                averageText: (results.isEmpty ? nil : String(format: "%.1f", (Double(results.reduce(0) { $0 + $1.word.count }) / Double(results.count)))),
+                isCapped: resultsWereCapped
             )
 
-            // ── Search Row ───────────────────────────
             SearchRow(
                 searchText: $searchText,
                 hasResults: !results.isEmpty,
                 hasSearched: hasSearched,
                 searchAsYouType: searchAsYouType,
+                maxLetters: maxLetters,
                 onSearch: performSearch,
                 onReset: {
                     results = []
@@ -422,7 +425,6 @@ struct ContentView: View {
                 }
             )
 
-            // ── Controls Row ─────────────────────────
             ControlsRow(
                 fullMatchesOnly: $fullMatchesOnly,
                 searchAsYouType: $searchAsYouType,
@@ -430,7 +432,6 @@ struct ContentView: View {
                 minLength: $minLength
             )
 
-            // ── Results / Empty state ─────────────────
             if results.isEmpty {
                 EmptyStateView(searchText: searchText, minLength: minLength)
             } else {
@@ -467,7 +468,6 @@ struct ContentView: View {
             }
         }
         .safeAreaInset(edge: .top) {
-            // Add a spacer matching the app bar background so content starts below the status bar
             Color(hex: "#0C1B2E").frame(height: 0)
                 .background(Color(hex: "#0C1B2E").ignoresSafeArea(edges: .top))
         }
@@ -486,10 +486,13 @@ struct ContentView: View {
             }
         }
         .onAppear { loadInitialData() }
-        .onChange(of: fullMatchesOnly)    { _, _ in performSearch() }
-        .onChange(of: minLength)          { _, _ in performSearch() }
-        .onChange(of: deepSearchEnabled)  { _, newValue in if newValue { triggerDeepSearch() } }
-        .onChange(of: searchText)         { _, newValue in handleSearchTextChange(newValue) }
+        .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
+        .onChange(of: minLength) { _, _ in
+            leftoverCache = [:] // svuota la cache degli avanzi se cambia il min len.
+            performSearch()
+        }
+        .onChange(of: deepSearchEnabled) { _, newValue in if newValue { triggerDeepSearch() } }
+        .onChange(of: searchText) { _, newValue in handleSearchTextChange(newValue) }
     }
 
     // ─── Logic ───────────────────────────────────
@@ -498,6 +501,7 @@ struct ContentView: View {
         let input = searchText.uppercased().replacingOccurrences(of: " ", with: "")
         guard input.count >= 2 else {
             results = []
+            resultsWereCapped = false
             hasSearched = false
             return
         }
@@ -510,41 +514,64 @@ struct ContentView: View {
             var tempCounts = inputCounts
             var canMake = true
             for char in Array(word) {
-                if let count = tempCounts[char], count > 0 { tempCounts[char]! -= 1 }
-                else { canMake = false; break }
+                if let count = tempCounts[char], count > 0 {
+                    tempCounts[char]! -= 1
+                } else {
+                    canMake = false
+                    break
+                }
             }
             guard canMake else { continue }
 
             let leftover = tempCounts
                 .flatMap { Array(repeating: $0.key, count: $0.value) }
-                .sorted().map(String.init).joined()
+                .sorted()
+                .map(String.init)
+                .joined()
             let isFull = leftover.isEmpty && word.count == input.count
             if fullMatchesOnly && !isFull { continue }
 
-            output.append(MatchResult(word: word, isFullMatch: isFull, leftover: leftover, usedLetterCount: word.count))
+            output.append(MatchResult(
+                id: word,
+                word: word,
+                isFullMatch: isFull,
+                leftover: leftover,
+                usedLetterCount: word.count
+            ))
         }
 
-        results = output.sorted {
+        output.sort {
             if $0.isFullMatch != $1.isFullMatch { return $0.isFullMatch }
             return $0.usedLetterCount > $1.usedLetterCount
         }
+
+        if output.count > resultsCap {
+            resultsWereCapped = true
+            results = Array(output.prefix(resultsCap))
+        } else {
+            resultsWereCapped = false
+            results = output
+        }
+
         hasSearched = true
         if deepSearchEnabled { triggerDeepSearch() }
     }
-
+    
     private func triggerDeepSearch() {
         for result in results where result.leftover.count >= 2 {
             loadLeftover(result.leftover)
         }
     }
 
+    // passa minLength alla query SQL
     private func loadLeftover(_ leftover: String) {
         guard leftover.count >= 2,
               leftoverCache[leftover] == nil,
               !loadingLeftovers.contains(leftover) else { return }
         loadingLeftovers.insert(leftover)
+        let currentMinLength = minLength
         DispatchQueue.global(qos: .userInitiated).async {
-            let matches = WordDatabase.shared.exactMatches(using: leftover)
+            let matches = WordDatabase.shared.exactMatches(using: leftover, minLength: currentMinLength)
             DispatchQueue.main.async {
                 loadingLeftovers.remove(leftover)
                 leftoverCache[leftover] = matches
@@ -552,24 +579,53 @@ struct ContentView: View {
         }
     }
 
+    // pre-filtra a >= 4 hardcoded (costante assoluta)
     private func loadInitialData() {
         DispatchQueue.global(qos: .userInitiated).async {
-            let words = WordDatabase.shared.allWords()
+            let words = WordDatabase.shared.allWords(minLength: 4)
             DispatchQueue.main.async { self.allWordsCache = words }
         }
     }
 
     private func handleSearchTextChange(_ newValue: String) {
+        //  pulisci il testo (solo lettere e spazi)
         let cleaned = newValue.uppercased().filter { $0.isLetter || $0 == " " }
-        if cleaned != newValue { searchText = cleaned }
+        
+        // Conta solo le lettere per il limite
+        let letterCount = cleaned.filter { $0.isLetter }.count
+        
+        // Se supera il limite di lettere, tronca mantenendo le prime maxLetters lettere
+        if letterCount > maxLetters {
+            var result = ""
+            var lettersAdded = 0
+            
+            for char in cleaned {
+                if char.isLetter {
+                    if lettersAdded < maxLetters {
+                        result.append(char)
+                        lettersAdded += 1
+                    }
+                } else if char == " " {
+                    // Le spazio possono rimanere, ma non contano per il limite
+                    result.append(char)
+                }
+            }
+            searchText = result
+            return
+        }
+        
+        // Aggiorna solo se diverso
+        if cleaned != newValue {
+            searchText = cleaned
+        }
+        
+        // Gestisci la ricerca live
         if searchAsYouType {
             liveSearchWorkItem?.cancel()
             let work = DispatchWorkItem { performSearch() }
             liveSearchWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
         } else {
-            // In modalità non-Live, quando l'utente modifica il testo, resetta i risultati
-            // così il bottone "Cerca" è necessario per vedere nuovi risultati
             if hasSearched {
                 results = []
                 hasSearched = false
@@ -577,10 +633,6 @@ struct ContentView: View {
         }
     }
 }
-
-// ─────────────────────────────────────────────
-// MARK: - Hex Color helper
-// ─────────────────────────────────────────────
 
 extension Color {
     init(hex: String) {
@@ -595,9 +647,8 @@ extension Color {
 }
 
 // ─────────────────────────────────────────────
-// MARK: - Subviews (invariati)
+// MARK: - Subviews
 // ─────────────────────────────────────────────
-
 struct ResultRow: View {
     let result: MatchResult
     let deepSearchEnabled: Bool

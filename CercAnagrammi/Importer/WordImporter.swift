@@ -1,6 +1,6 @@
 // WordImporter.swift
 // CLI tool to populate a lean SQLite database from a newline-delimited .txt file.
-// Only uppercase A-Z strings are accepted.
+// Only uppercase A-Z strings are accepted. Strings of 2 characters are excluded.
 // Produces a single-table DB: words(word, sorted)
 //
 // Usage:
@@ -80,6 +80,8 @@ func sortedLetters(_ str: String) -> String {
 
 func isValidWord(_ str: String) -> Bool {
     guard !str.isEmpty else { return false }
+    // Exclude strings of exactly 2 characters
+    guard str.count > 2 else { return false }
     return str.unicodeScalars.allSatisfy { CharacterSet.uppercaseLetters.contains($0) }
 }
 
@@ -149,17 +151,43 @@ func runImport(_ parsed: ParsedArgs) {
 
     if parsed.dryRun {
         print("DRY RUN — no files will be written.\n")
-        var valid = 0, skipped = 0, invalid = 0
+        var valid = 0, skipped = 0, invalid = 0, excludedTwoChar = 0
+        var lengthStats: [Int: Int] = [:]
+        
         for raw in lines {
             let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                          .uppercased(with: Locale.current)
             if word.isEmpty { skipped += 1; continue }
-            if isValidWord(word) { valid += 1 } else {
+            
+            // Check for 2-character strings first
+            if word.count == 2 {
+                excludedTwoChar += 1
+                print("  ✖ Excluded (2 chars): \(word)")
+                continue
+            }
+            
+            if isValidWord(word) {
+                valid += 1
+                lengthStats[word.count, default: 0] += 1
+            } else {
                 invalid += 1
                 print("  ✖ Invalid: \(word)")
             }
         }
-        print("\nDry run complete. Valid: \(valid), Invalid: \(invalid), Blank/skipped: \(skipped)")
+        
+        print("\nDry run complete.")
+        print("Valid (3+ chars): \(valid)")
+        print("Excluded (2 chars): \(excludedTwoChar)")
+        print("Invalid: \(invalid)")
+        print("Blank/skipped: \(skipped)")
+        
+        // Print length statistics
+        print("\n📊 Statistics by length (3+ characters):")
+        let sortedLengths = lengthStats.keys.sorted()
+        for length in sortedLengths {
+            let count = lengthStats[length] ?? 0
+            print("  Length \(length): \(count) words")
+        }
         return
     }
 
@@ -192,7 +220,8 @@ func runImport(_ parsed: ParsedArgs) {
 
     var seenInRun  = Set<String>()
     var batchCount = 0
-    var valid = 0, skipped = 0, invalid = 0
+    var valid = 0, skipped = 0, invalid = 0, excludedTwoChar = 0
+    var lengthStats: [Int: Int] = [:]
 
     sqlite3_exec(dBase, "BEGIN TRANSACTION", nil, nil, nil)
 
@@ -202,6 +231,13 @@ func runImport(_ parsed: ParsedArgs) {
             .uppercased(with: Locale.current)
 
         if word.isEmpty { skipped += 1; continue }
+
+        // Check for 2-character strings first
+        if word.count == 2 {
+            excludedTwoChar += 1
+            print("  ⚠︎  Line \(lineNumber + 1) excluded (2 chars): \"\(word)\"")
+            continue
+        }
 
         guard isValidWord(word) else {
             invalid += 1
@@ -222,7 +258,8 @@ func runImport(_ parsed: ParsedArgs) {
         }
         sqlite3_reset(stmt)
 
-        valid      += 1
+        valid += 1
+        lengthStats[word.count, default: 0] += 1
         batchCount += 1
 
         if batchCount >= parsed.batchSize {
@@ -246,9 +283,21 @@ func runImport(_ parsed: ParsedArgs) {
 
     ────────────────────────────────────────────
     Import complete.
-      Valid inserted : \(valid)
-      Invalid lines  : \(invalid)
-      Blank/duplicate: \(skipped)
+      Valid inserted (3+ chars): \(valid)
+      Excluded (2 chars)      : \(excludedTwoChar)
+      Invalid lines           : \(invalid)
+      Blank/duplicate         : \(skipped)
+
+    📊 Statistics by length (3+ characters):
+    """)
+    
+    let sortedLengths = lengthStats.keys.sorted()
+    for length in sortedLengths {
+        let count = lengthStats[length] ?? 0
+        print("      Length \(length): \(count) words")
+    }
+    
+    print("""
 
     DB written to:
       \(targetURL.path)
