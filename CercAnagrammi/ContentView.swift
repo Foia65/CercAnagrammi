@@ -422,6 +422,7 @@ struct ContentView: View {
     @State private var showingHelp = false
     @State private var definitionTerm: String?
     @State private var scrollToTopTrigger = false
+    @State private var collapsedSections: Set<Int> = []
 
     private struct LeftoverPresentation: Identifiable {
         let id = UUID()
@@ -431,9 +432,79 @@ struct ContentView: View {
     @State private var leftoverSheetItem: LeftoverPresentation?
     private let maxLetters = 25
 
-    private let resultsCap = 5000
+    private let resultsCap = 500000 // vediamo se usarlo
     @State private var resultsWereCapped = false
 
+    private let deepSearchQueue: OperationQueue = {  /// Deep Search Engine
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 4
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
+    
+// ─────────────────────────────────────────────
+// MARK: - Deep Search Tuning (Performance / Memory)
+// ─────────────────────────────────────────────
+//
+// Questi parametri controllano il bilanciamento tra:
+// - velocità
+// - consumo di memoria
+// - completezza dei risultati
+//
+// 🔹 maxDeepSearchTasks
+// Numero massimo di "leftover" (sotto-anagrammi) analizzati per ogni ricerca.
+//
+// Effetti:
+// - ↑ valore → più risultati ma più CPU/RAM e maggiore latenza
+// - ↓ valore → app più veloce e stabile ma risultati meno completi
+//
+// Nota:
+// I leftover vengono ordinati per lunghezza (più corti prima),
+// quindi anche valori moderati producono risultati utili rapidamente.
+//
+// Valori tipici:
+// - 50–80   → veloce e sicuro (device vecchi)
+// - 80–150  → bilanciato (consigliato)
+// - 200+    → più completo ma più pesante
+//
+//
+// 🔹 maxCacheSize
+// Numero massimo di risultati di deep search mantenuti in memoria.
+//
+// Struttura cache:
+// [leftover: [parole]]
+//
+// Effetti:
+// - ↑ valore → meno ricalcoli, UI più fluida, ma più RAM
+// - ↓ valore → meno memoria, ma più query ripetute (piccoli lag)
+//
+// Valori tipici:
+// - 100–300 → memoria contenuta
+// - 300–600 → bilanciato (consigliato)
+// - 1000+   → performance migliori ma rischio memory pressure
+//
+//
+// ⚠️ Interazione tra i due:
+// Più maxDeepSearchTasks aumenta → più la cache cresce → serve più maxCacheSize
+//
+// Esempi:
+// - Fast & Safe → tasks: 80 / cache: 300
+// - Balanced   → tasks: 120 / cache: 500
+// - Power user → tasks: 250 / cache: 1000
+//
+//
+// 🛑 Sicurezza:
+// - Le operazioni sono limitate con OperationQueue (maxConcurrentOperationCount)
+// - Le ricerche vengono cancellate quando cambia input
+// - La cache è limitata per evitare crescita incontrollata
+//
+// 🎯 Obiettivo:
+// evitare crash per memoria mantenendo una UX fluida e progressiva
+//
+
+    private let maxDeepSearchTasks = 120
+    private let maxCacheSize = 500
+    
     private var groupedResults: [(count: Int, items: [MatchResult])] {
         let groups = Dictionary(grouping: results) { $0.usedLetterCount }
         return groups
@@ -479,40 +550,82 @@ struct ContentView: View {
                 EmptyStateView(searchText: searchText, minLength: minLength)
             } else {
                 ScrollViewReader { proxy in
-                    List {
-                        ForEach(groupedResults, id: \.count) { section in
-                            Section(
-                                header: Text("\(section.count) Lettere")
-                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Color.textSecondary)
-                            ) {
-                                ForEach(section.items) { result in
-                                    ResultRow(
-                                        result: result,
-                                        deepSearchEnabled: deepSearchEnabled,
-                                        leftoverCache: leftoverCache,
-                                        loadingLeftovers: loadingLeftovers,
-                                        onLoadLeftover: loadLeftover,
-                                        onShowSheet: { title, matches in
-                                            leftoverSheetItem = LeftoverPresentation(title: title, words: matches)
-                                        },
-                                        onWordTapped: { word in definitionTerm = word }
-                                    )
-                                    .id(result.id)
-                                    .listRowBackground(Color.steelCard)
+
+                    ScrollViewReader { proxy in
+                        List {
+                            ForEach(groupedResults, id: \.count) { section in
+                                Section(
+                                    header:
+                                        HStack {
+                                            HStack(spacing: 6) {
+                                                Text("\(section.count) Lettere")
+                                                    .font(.system(size: 15, weight: .semibold))  // no design: .monospaced
+
+                                                Text("(\(section.items.count))")
+                                                    .font(.system(size: 12, weight: .medium))
+                                                    .foregroundStyle(Color.textSecondary)
+                                            }
+                                            
+                                            Spacer()
+
+                                            Image(systemName: collapsedSections.contains(section.count) ? "chevron.down" : "chevron.up")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(Color.textMuted)
+                                                .animation(.easeInOut(duration: 0.2), value: collapsedSections)
+                                        }
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                if collapsedSections.contains(section.count) {
+                                                    collapsedSections.remove(section.count)
+                                                } else {
+                                                    collapsedSections.insert(section.count)
+                                                }
+                                            }
+                                        }
+                                ) {
+                                    ForEach(
+                                        collapsedSections.contains(section.count) ? [] : section.items
+                                    ) { result in
+                                        ResultRow(
+                                            result: result,
+                                            deepSearchEnabled: deepSearchEnabled,
+                                            leftoverCache: leftoverCache,
+                                            loadingLeftovers: loadingLeftovers,
+                                            onLoadLeftover: loadLeftover,
+                                            onShowSheet: { title, matches in
+                                                leftoverSheetItem = LeftoverPresentation(title: title, words: matches)
+                                            },
+                                            onWordTapped: { word in
+                                                definitionTerm = word
+                                            }
+                                        )
+                                        .id(result.id)
+                                        .listRowBackground(Color.steelCard)
+                                    }
                                 }
                             }
                         }
-                    }
-                    .listStyle(.insetGrouped)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.steelBase)
-                    .onChange(of: scrollToTopTrigger) { _, _ in
-                        if let firstItem = groupedResults.first?.items.first {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(firstItem.id, anchor: .top)
+                        .listStyle(.insetGrouped)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.steelBase)
+                        .onChange(of: scrollToTopTrigger) { _, _ in
+                            if let topSection = groupedResults.first?.count {
+                                collapsedSections.remove(topSection)
+                            }
+                            if let firstItem = groupedResults.first?.items.first {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo(firstItem.id, anchor: .top)
+                                }
                             }
                         }
+//                        .onChange(of: scrollToTopTrigger) { _, _ in
+//                            if let firstItem = groupedResults.first?.items.first {
+//                                withAnimation(.easeInOut(duration: 0.3)) {
+//                                    proxy.scrollTo(firstItem.id, anchor: .top)
+//                                }
+//                            }
+//                        }
                     }
                 }
             }
@@ -539,13 +652,25 @@ struct ContentView: View {
         .onAppear { loadInitialData() }
         .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
         .onChange(of: minLength) { _, _ in leftoverCache = [:]; performSearch() }
-        .onChange(of: deepSearchEnabled) { _, newValue in if newValue { triggerDeepSearch() } }
         .onChange(of: searchText) { _, newValue in handleSearchTextChange(newValue) }
+        // Cancella deep search quando cambia contesto
+        .onChange(of: deepSearchEnabled) { _, newValue in
+            if newValue {
+                triggerDeepSearch()
+            } else {
+                deepSearchQueue.cancelAllOperations()
+                loadingLeftovers.removeAll()
+            }
+        }
     }
 
     // ─── Logic ───────────────────────────────────
 
     private func performSearch() {
+        // Cancella deep search quando cambia contesto
+        deepSearchQueue.cancelAllOperations()
+        loadingLeftovers.removeAll()
+        
         let input = searchText.uppercased().replacingOccurrences(of: " ", with: "")
         guard input.count >= 2 else {
             results = []
@@ -558,6 +683,11 @@ struct ContentView: View {
         var output: [MatchResult] = []
 
         for word in allWordsCache {
+            // EARLY STOP
+            if output.count >= resultsCap {
+                resultsWereCapped = true
+                break
+            }
             if word == input || word.count < minLength { continue }
             var tempCounts = inputCounts
             var canMake = true
@@ -593,35 +723,70 @@ struct ContentView: View {
             return $0.usedLetterCount > $1.usedLetterCount
         }
 
-        if output.count > resultsCap {
-            resultsWereCapped = true
-            results = Array(output.prefix(resultsCap))
-        } else {
-            resultsWereCapped = false
-            results = output
-        }
+        results = output
 
+        let allSections = Set(output.map { $0.usedLetterCount })
+        if let topSection = allSections.max() {
+            collapsedSections = allSections.subtracting([topSection])
+        } else {
+            collapsedSections = []
+        }
         hasSearched = true
         if deepSearchEnabled { triggerDeepSearch() }
-    }
+        }
 
     private func triggerDeepSearch() {
-        for result in results where result.leftover.count >= 2 {
-            loadLeftover(result.leftover)
+        deepSearchQueue.cancelAllOperations()  /// Cancella eventuali operazioni vecchie
+
+        let uniqueLeftovers = Array(Set(    /// Deduplica leftover
+            results
+                .map { $0.leftover }
+                .filter { $0.count >= 2 }
+        ))
+
+        let prioritized = uniqueLeftovers    /// Priorità: leftover più corti prima
+            .sorted { $0.count < $1.count }
+            .prefix(maxDeepSearchTasks)
+
+        for leftover in prioritized {
+            loadLeftover(leftover)
         }
     }
-
+    
     private func loadLeftover(_ leftover: String) {
         guard leftover.count >= 2,
               leftoverCache[leftover] == nil,
               !loadingLeftovers.contains(leftover) else { return }
+
         loadingLeftovers.insert(leftover)
         let currentMinLength = minLength
-        DispatchQueue.global(qos: .userInitiated).async {
-            let matches = WordDatabase.shared.exactMatches(using: leftover, minLength: currentMinLength)
-            DispatchQueue.main.async {
-                loadingLeftovers.remove(leftover)
-                leftoverCache[leftover] = matches
+
+        deepSearchQueue.addOperation {
+
+            // Se l'operazione è stata cancellata → esci subito
+            if self.deepSearchQueue.isSuspended { return }
+
+            let matches = WordDatabase.shared.exactMatches(
+                using: leftover,
+                minLength: currentMinLength
+            )
+
+            if self.deepSearchQueue.operations.contains(where: { $0.isCancelled }) {
+                return
+            }
+
+            OperationQueue.main.addOperation {
+                // Se nel frattempo è cambiata la ricerca → ignora
+                guard self.loadingLeftovers.contains(leftover) else { return }
+
+                self.loadingLeftovers.remove(leftover)
+
+                // Limita la cache (evita crescita infinita)
+                if self.leftoverCache.count > self.maxCacheSize {
+                    self.leftoverCache.removeAll()
+                }
+
+                self.leftoverCache[leftover] = matches
             }
         }
     }
@@ -634,6 +799,10 @@ struct ContentView: View {
     }
 
     private func handleSearchTextChange(_ newValue: String) {
+        // Cancella deep search quando cambia contesto
+        deepSearchQueue.cancelAllOperations()
+        loadingLeftovers.removeAll()
+ 
         let cleaned = newValue.uppercased().filter { $0.isLetter || $0 == " " }
         let letterCount = cleaned.filter { $0.isLetter }.count
 

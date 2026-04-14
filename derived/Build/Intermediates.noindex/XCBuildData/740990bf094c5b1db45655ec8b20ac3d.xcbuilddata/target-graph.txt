@@ -1,2 +1,0 @@
-Target dependency graph (1 target)
-Target 'WordImporter' in project 'CercAnagrammi' (no dependencies)

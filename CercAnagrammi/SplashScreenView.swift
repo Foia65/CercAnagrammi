@@ -45,7 +45,7 @@ struct SplashScreenView: View {
                 
                 // Versione e build (bianco per sfondo scuro)
                 HStack(spacing: 4) {
-                    Text("Version:")
+                    Text("Versione:")
                     Text(Bundle.main.appVersionDisplay)
                     Text("Build:")
                     Text(Bundle.main.appBuild)
