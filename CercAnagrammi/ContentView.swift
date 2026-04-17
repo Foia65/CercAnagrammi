@@ -3,6 +3,7 @@ import SQLite3
 import UIKit
 
 extension Color {
+    // Inizializzatore comodo per creare un Color da stringa esadecimale (#RRGGBB)
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0
@@ -13,19 +14,21 @@ extension Color {
         self.init(red: red, green: green, blue: blue)
     }
 
+    // Tavolozza: colori di sfondo
     // Backgrounds
     static let steelBase    = Color(hex: "#0C1B2E")
     static let steelSurface = Color(hex: "#0F2236")
     static let steelCard    = Color(hex: "#122840")
     static let steelBorder  = Color(hex: "#1E3D5C")
 
+    // Tavolozza: colori accento
     // Accents
     static let accentBlue   = Color(hex: "#378ADD")
     static let accentGreen  = Color(hex: "#4CAF8A")
-//    static let accentViolet = Color(hex: "#8B7EC8")
     static let accentViolet = Color(hex: "#9789D9")
     static let accentGold   = Color(hex: "#C9A84C")
 
+    // Tavolozza: colori testo
     // Text
     static let textPrimary   = Color(hex: "#E6F1FB")
     static let textSecondary = Color(hex: "#6B8FAD")
@@ -35,28 +38,43 @@ extension Color {
 // ─────────────────────────────────────────────
 // MARK: - Database
 // ─────────────────────────────────────────────
+
+// Accesso a SQLite (read-only) con coda seriale per thread-safety
 final class WordDatabase {
+    // Singleton dell'archivio parole: un'unica istanza condivisa in tutta l'app
     static let shared = WordDatabase()
+    // Puntatore al database SQLite aperto in sola lettura
     private var database: OpaquePointer?
+    // Coda seriale per garantire accesso thread-safe a SQLite (le API C non sono thread-safe di default)
     private let dbQueue = DispatchQueue(label: "WordDatabase.SerialQueue")
 
     private init() {
-        guard let bundlePath = Bundle.main.path(forResource: "Words", ofType: "db") else { return }
-        sqlite3_open_v2(bundlePath, &database, SQLITE_OPEN_READONLY, nil)
+        // Apre il database SQLite incluso nel bundle dell'app in modalità sola lettura
+        guard let bundlePath = Bundle.main.path(forResource: "Words", ofType: "db") else { return } // Percorso al file Words.db nel bundle
+        sqlite3_open_v2(bundlePath, &database, SQLITE_OPEN_READONLY, nil) // Apertura in sola lettura: performance migliori e sicurezza
     }
 
     func exactMatches(using letters: String, minLength: Int = 4) -> [String] {
+        // Restituisce le parole che hanno esattamente le stesse lettere (stessa stringa ordinata)
         return dbQueue.sync {
             guard let database else { return [] }
+            // Normalizza e ordina le lettere in modo da confrontarle con la colonna "sorted"
             let key = String(letters.uppercased().sorted())
+            // Query parametrizzata con prepared statement per evitare injection e migliorare performance
             let sql = "SELECT word FROM words WHERE sorted = ? AND LENGTH(word) >= ? ORDER BY word"
+            // Handle dello statement compilato
             var statement: OpaquePointer?
+            // Compila lo statement SQL; se fallisce, restituisce array vuoto
             guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
             defer { sqlite3_finalize(statement) }
+            // Bind del parametro 1: chiave ordinata (es. "AEMN" per "name")
             sqlite3_bind_text(statement, 1, (key as NSString).utf8String, -1, nil)
+            // Bind del parametro 2: lunghezza minima della parola
             sqlite3_bind_int(statement, 2, Int32(minLength))
+            // Esecuzione e iterazione delle righe risultanti
             var results: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
+                // Estrae la colonna 0 ("word") come C string e la converte in String
                 if let cString = sqlite3_column_text(statement, 0) {
                     results.append(String(cString: cString))
                 }
@@ -66,15 +84,22 @@ final class WordDatabase {
     }
 
     func allWords(minLength: Int = 4) -> [String] {
+        // Restituisce tutte le parole con lunghezza >= minLength
         return dbQueue.sync {
             guard let database else { return [] }
+            // Query semplice con filtro sulla lunghezza minima
             let sql = "SELECT word FROM words WHERE LENGTH(word) >= ?"
+            // Handle dello statement compilato
             var statement: OpaquePointer?
+            // Compila lo statement SQL; se fallisce, restituisce array vuoto
             guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
             defer { sqlite3_finalize(statement) }
+            // Bind del parametro 1: lunghezza minima
             sqlite3_bind_int(statement, 1, Int32(minLength))
+            // Itera i risultati e costruisce l'array di parole
             var results: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
+                // Estrae la colonna 0 ("word")
                 if let cString = sqlite3_column_text(statement, 0) {
                     results.append(String(cString: cString))
                 }
@@ -98,6 +123,8 @@ struct MatchResult: Identifiable {
 // ─────────────────────────────────────────────
 // MARK: - App Bar
 // ─────────────────────────────────────────────
+
+// Barra superiore con titolo, sottotitolo dinamico e azioni (help, scroll to top)
 struct AppBar: View {
 
     let resultCount: Int?
@@ -108,6 +135,7 @@ struct AppBar: View {
     let averageText: String?
     let isCapped: Bool
 
+    // Costruisce il sottotitolo in base al numero di risultati e ai riepiloghi
     private var subtitle: String {
         let base: String = {
             guard let count = resultCount else { return "" }
@@ -123,6 +151,7 @@ struct AppBar: View {
         return base
     }
 
+    // Colore del sottotitolo in base allo stato (nessun risultato, troncato, ok)
     private var subtitleColor: Color {
         guard let count = resultCount else { return .accentBlue }
         if count == 0 { return Color(hex: "#C0504A") }
@@ -169,6 +198,7 @@ struct AppBar: View {
     }
 }
 
+// Pulsante compatto per la top bar con icona SF Symbols
 struct SteelBarButton: View {
     let icon: String
     let action: () -> Void
@@ -193,6 +223,8 @@ struct SteelBarButton: View {
 // ─────────────────────────────────────────────
 // MARK: - Search Row
 // ─────────────────────────────────────────────
+
+// Riga di ricerca: campo testo + pulsante cerca + contatore lettere + reset
 struct SearchRow: View {
     @Binding var searchText: String
     let hasResults: Bool
@@ -202,6 +234,7 @@ struct SearchRow: View {
     let onSearch: () -> Void
     let onReset: () -> Void
 
+    // Disabilita il bottone se il campo è vuoto
     private var isSearchDisabled: Bool { searchText.isEmpty }
 
     var body: some View {
@@ -213,9 +246,12 @@ struct SearchRow: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color.textMuted)
 
+                // Impostazioni input: maiuscolo, no autocorrezione, tastiera ASCII
                 TextField("Scrivi qui…", text: $searchText)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled(true)
+                    .keyboardType(.asciiCapable)
+                    .textContentType(.none)
                     .submitLabel(.search)
                     .font(.system(size: 15, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Color.textPrimary)
@@ -224,6 +260,7 @@ struct SearchRow: View {
                         if !searchText.isEmpty { onSearch() }
                     }
 
+                // Mostra contatore lettere e pulsante di cancellazione quando c'è input
                 if !searchText.isEmpty {
                     let letterCount = searchText.filter { $0.isLetter }.count
                     let isAtLimit   = letterCount >= maxLetters
@@ -267,6 +304,7 @@ struct SearchRow: View {
             )
             .animation(.easeInOut(duration: 0.15), value: searchText.isEmpty)
 
+            // Bottone di esecuzione ricerca (abilitato solo con testo)
             // ── Search button ────────────────────────
             Button { onSearch() } label: {
                 ZStack {
@@ -301,6 +339,8 @@ struct SearchRow: View {
 // ─────────────────────────────────────────────
 // MARK: - Controls Row
 // ─────────────────────────────────────────────
+
+// Controlli filtro: solo match completi, live search, deep search, lunghezza minima
 struct ControlsRow: View {
     @Binding var fullMatchesOnly: Bool
     @Binding var searchAsYouType: Bool
@@ -347,6 +387,7 @@ struct ControlsRow: View {
     }
 }
 
+// Chip selezionabile con stato attivo/inattivo
 struct SteelChip: View {
     let title: String
     let isActive: Bool
@@ -376,6 +417,7 @@ struct SteelChip: View {
     }
 }
 
+// Pulsante stepper (+/−) con stato disabilitato
 struct StepperButton: View {
     let icon: String
     let disabled: Bool
@@ -405,7 +447,10 @@ struct StepperButton: View {
 // ─────────────────────────────────────────────
 // MARK: - Main View
 // ─────────────────────────────────────────────
+
+// Vista principale: orchestrazione stato, UI e logica di ricerca
 struct ContentView: View {
+    // Stato di ricerca e preferenze
     @State private var searchText = ""
     @State private var results: [MatchResult] = []
     @State private var searchAsYouType = false
@@ -414,27 +459,33 @@ struct ContentView: View {
     @State private var deepSearchEnabled = false
     @State private var hasSearched = false
 
+    // Stato per deep search e caching
     @State private var loadingLeftovers: Set<String> = []
     @State private var leftoverCache: [String: [String]] = [:]
     @State private var allWordsCache: [String] = []
     @State private var liveSearchWorkItem: DispatchWorkItem?
 
+    // Stato UI e presentazioni
     @State private var showingHelp = false
     @State private var definitionTerm: String?
     @State private var scrollToTopTrigger = false
     @State private var collapsedSections: Set<Int> = []
 
+    // Dati per presentare lo sheet dei "leftover"
     private struct LeftoverPresentation: Identifiable {
         let id = UUID()
         let title: String
         let words: [String]
     }
     @State private var leftoverSheetItem: LeftoverPresentation?
+    // Limite massimo di lettere inseribili
     private let maxLetters = 25
 
+    // Cap massimo risultati (protezione performance)
     private let resultsCap = 500000 // vediamo se usarlo
     @State private var resultsWereCapped = false
 
+    // Coda di operazioni per la deep search (concorrenza controllata)
     private let deepSearchQueue: OperationQueue = {  /// Deep Search Engine
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 4
@@ -442,69 +493,73 @@ struct ContentView: View {
         return queue
     }()
     
-// ─────────────────────────────────────────────
-// MARK: - Deep Search Tuning (Performance / Memory)
-// ─────────────────────────────────────────────
-//
-// Questi parametri controllano il bilanciamento tra:
-// - velocità
-// - consumo di memoria
-// - completezza dei risultati
-//
-// 🔹 maxDeepSearchTasks
-// Numero massimo di "leftover" (sotto-anagrammi) analizzati per ogni ricerca.
-//
-// Effetti:
-// - ↑ valore → più risultati ma più CPU/RAM e maggiore latenza
-// - ↓ valore → app più veloce e stabile ma risultati meno completi
-//
-// Nota:
-// I leftover vengono ordinati per lunghezza (più corti prima),
-// quindi anche valori moderati producono risultati utili rapidamente.
-//
-// Valori tipici:
-// - 50–80   → veloce e sicuro (device vecchi)
-// - 80–150  → bilanciato (consigliato)
-// - 200+    → più completo ma più pesante
-//
-//
-// 🔹 maxCacheSize
-// Numero massimo di risultati di deep search mantenuti in memoria.
-//
-// Struttura cache:
-// [leftover: [parole]]
-//
-// Effetti:
-// - ↑ valore → meno ricalcoli, UI più fluida, ma più RAM
-// - ↓ valore → meno memoria, ma più query ripetute (piccoli lag)
-//
-// Valori tipici:
-// - 100–300 → memoria contenuta
-// - 300–600 → bilanciato (consigliato)
-// - 1000+   → performance migliori ma rischio memory pressure
-//
-//
-// ⚠️ Interazione tra i due:
-// Più maxDeepSearchTasks aumenta → più la cache cresce → serve più maxCacheSize
-//
-// Esempi:
-// - Fast & Safe → tasks: 80 / cache: 300
-// - Balanced   → tasks: 120 / cache: 500
-// - Power user → tasks: 250 / cache: 1000
-//
-//
-// 🛑 Sicurezza:
-// - Le operazioni sono limitate con OperationQueue (maxConcurrentOperationCount)
-// - Le ricerche vengono cancellate quando cambia input
-// - La cache è limitata per evitare crescita incontrollata
-//
-// 🎯 Obiettivo:
-// evitare crash per memoria mantenendo una UX fluida e progressiva
-//
+    // Parametri di tuning per bilanciare performance/memoria
+    // ─────────────────────────────────────────────
+    // MARK: - Deep Search Tuning (Performance / Memory)
+    // ─────────────────────────────────────────────
+    //
+    // Questi parametri controllano il bilanciamento tra:
+    // - velocità
+    // - consumo di memoria
+    // - completezza dei risultati
+    //
+    // 🔹 maxDeepSearchTasks
+    // Numero massimo di "leftover" (sotto-anagrammi) analizzati per ogni ricerca.
+    //
+    // Effetti:
+    // - ↑ valore → più risultati ma più CPU/RAM e maggiore latenza
+    // - ↓ valore → app più veloce e stabile ma risultati meno completi
+    //
+    // Nota:
+    // I leftover vengono ordinati per lunghezza (più corti prima),
+    // quindi anche valori moderati producono risultati utili rapidamente.
+    //
+    // Valori tipici:
+    // - 50–80   → veloce e sicuro (device vecchi)
+    // - 80–150  → bilanciato (consigliato)
+    // - 200+    → più completo ma più pesante
+    //
+    //
+    // 🔹 maxCacheSize
+    // Numero massimo di risultati di deep search mantenuti in memoria.
+    //
+    // Struttura cache:
+    // [leftover: [parole]]
+    //
+    // Effetti:
+    // - ↑ valore → meno ricalcoli, UI più fluida, ma più RAM
+    // - ↓ valore → meno memoria, ma più query ripetute (piccoli lag)
+    //
+    // Valori tipici:
+    // - 100–300 → memoria contenuta
+    // - 300–600 → bilanciato (consigliato)
+    // - 1000+   → performance migliori ma rischio memory pressure
+    //
+    //
+    // ⚠️ Interazione tra i due:
+    // Più maxDeepSearchTasks aumenta → più la cache cresce → serve più maxCacheSize
+    //
+    // Esempi:
+    // - Fast & Safe → tasks: 80 / cache: 300
+    // - Balanced   → tasks: 120 / cache: 500
+    // - Power user → tasks: 250 / cache: 1000
+    //
+    //
+    // Sicurezza:
+    // - Le operazioni sono limitate con OperationQueue (maxConcurrentOperationCount)
+    // - Le ricerche vengono cancellate quando cambia input
+    // - La cache è limitata per evitare crescita incontrollata
+    //
+    // 🎯 Obiettivo:
+    // evitare crash per memoria mantenendo una UX fluida e progressiva
+    //
 
+    // Numero massimo di leftover processati per ricerca
     private let maxDeepSearchTasks = 120
+    // Dimensione massima della cache dei leftover
     private let maxCacheSize = 500
     
+    // Raggruppa i risultati per numero di lettere usate e li ordina
     private var groupedResults: [(count: Int, items: [MatchResult])] {
         let groups = Dictionary(grouping: results) { $0.usedLetterCount }
         return groups
@@ -512,10 +567,18 @@ struct ContentView: View {
             .sorted { $0.key > $1.key }
             .map { (count: $0.key, items: $0.value) }
     }
+    
+    // Normalizza stringhe (maiuscolo, senza diacritici, solo lettere)
+    private func normalizeLetters(_ string: String) -> String {
+        // Rimuove diacritici e mantiene solo lettere maiuscole per il matching
+        let folded = string.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        return folded.uppercased().filter { $0.isLetter }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
 
+            // Top bar con titolo e statistiche sintetiche
             AppBar(
                 resultCount: hasSearched ? results.count : nil,
                 showScrollTop: !results.isEmpty,
@@ -526,6 +589,7 @@ struct ContentView: View {
                 isCapped: resultsWereCapped
             )
 
+            // Input di ricerca
             SearchRow(
                 searchText: $searchText,
                 hasResults: !results.isEmpty,
@@ -539,6 +603,7 @@ struct ContentView: View {
                 }
             )
 
+            // Filtri e controlli
             ControlsRow(
                 fullMatchesOnly: $fullMatchesOnly,
                 searchAsYouType: $searchAsYouType,
@@ -546,6 +611,7 @@ struct ContentView: View {
                 minLength: $minLength
             )
 
+            // Lista risultati (con sezioni collassabili) oppure stato vuoto
             if results.isEmpty {
                 EmptyStateView(searchText: searchText, minLength: minLength)
             } else {
@@ -610,6 +676,7 @@ struct ContentView: View {
                         .scrollContentBackground(.hidden)
                         .background(Color.steelBase)
                         .onChange(of: scrollToTopTrigger) { _, _ in
+                            // Espandi la sezione più grande e scrolla al primo risultato
                             if let topSection = groupedResults.first?.count {
                                 collapsedSections.remove(topSection)
                             }
@@ -619,13 +686,6 @@ struct ContentView: View {
                                 }
                             }
                         }
-//                        .onChange(of: scrollToTopTrigger) { _, _ in
-//                            if let firstItem = groupedResults.first?.items.first {
-//                                withAnimation(.easeInOut(duration: 0.3)) {
-//                                    proxy.scrollTo(firstItem.id, anchor: .top)
-//                                }
-//                            }
-//                        }
                     }
                 }
             }
@@ -635,12 +695,15 @@ struct ContentView: View {
             Color.steelBase.frame(height: 0)
                 .background(Color.steelBase.ignoresSafeArea(edges: .top))
         }
+        // Sheet con le parole trovate per un leftover
         .sheet(item: $leftoverSheetItem) { item in
             LeftoverSheet(title: item.title, words: item.words)
         }
+        // Schermata di aiuto
         .fullScreenCover(isPresented: $showingHelp) {
             HelpView()
         }
+        // Definizione del dizionario per parola selezionata
         .fullScreenCover(isPresented: Binding<Bool>(
             get: { definitionTerm != nil },
             set: { if !$0 { definitionTerm = nil } }
@@ -649,11 +712,15 @@ struct ContentView: View {
                 DictionaryDefinitionView(term: term)
             }
         }
+        // Precarica parole dal DB in cache
         .onAppear { loadInitialData() }
+        // Ricalcola quando cambia filtro 100%
         .onChange(of: fullMatchesOnly) { _, _ in performSearch() }
+        // Svuota cache leftover e ricalcola quando cambia la lunghezza minima
         .onChange(of: minLength) { _, _ in leftoverCache = [:]; performSearch() }
+        // Gestisce normalizzazione input, limite lettere e (opz.) live search
         .onChange(of: searchText) { _, newValue in handleSearchTextChange(newValue) }
-        // Cancella deep search quando cambia contesto
+        // Avvia/ferma la deep search quando cambia lo stato
         .onChange(of: deepSearchEnabled) { _, newValue in
             if newValue {
                 triggerDeepSearch()
@@ -666,12 +733,16 @@ struct ContentView: View {
 
     // ─── Logic ───────────────────────────────────
 
+    // Esegue la ricerca principale su tutte le parole in cache
     private func performSearch() {
-        // Cancella deep search quando cambia contesto
+        // Reset deep search per nuovo contesto
         deepSearchQueue.cancelAllOperations()
         loadingLeftovers.removeAll()
         
-        let input = searchText.uppercased().replacingOccurrences(of: " ", with: "")
+        // Normalizza input: rimuove spazi e caratteri non lettera
+        let rawInput = searchText.replacingOccurrences(of: " ", with: "")
+        // Richiede almeno 2 lettere per partire
+        let input = normalizeLetters(rawInput)
         guard input.count >= 2 else {
             results = []
             resultsWereCapped = false
@@ -679,19 +750,23 @@ struct ContentView: View {
             return
         }
 
+        // Conta le occorrenze di ogni lettera per il matching
         let inputCounts = Array(input).reduce(into: [:]) { $0[$1, default: 0] += 1 }
         var output: [MatchResult] = []
 
+        // Scansiona tutte le parole disponibili (precaricate)
         for word in allWordsCache {
-            // EARLY STOP
+            // Early stop se si raggiunge il cap di risultati
             if output.count >= resultsCap {
                 resultsWereCapped = true
                 break
             }
-            if word == input || word.count < minLength { continue }
+            // Esclude la parola identica all'input e parole troppo corte
+            if word == rawInput || word.count < minLength { continue }
             var tempCounts = inputCounts
+            // Verifica se la parola può essere costruita con le lettere disponibili
             var canMake = true
-            for char in Array(word) {
+            for char in Array(normalizeLetters(word)) {
                 if let count = tempCounts[char], count > 0 {
                     tempCounts[char]! -= 1
                 } else {
@@ -701,12 +776,14 @@ struct ContentView: View {
             }
             guard canMake else { continue }
 
+            // Costruisce il leftover ordinato (lettere non usate)
             let leftover = tempCounts
                 .flatMap { Array(repeating: $0.key, count: $0.value) }
                 .sorted()
                 .map(String.init)
                 .joined()
-            let isFull = leftover.isEmpty && word.count == input.count
+            // True se tutte le lettere sono usate e lunghezze coincidono
+            let isFull = leftover.isEmpty && normalizeLetters(word).count == input.count
             if fullMatchesOnly && !isFull { continue }
 
             output.append(MatchResult(
@@ -718,11 +795,13 @@ struct ContentView: View {
             ))
         }
 
+        // Ordina: prima i match completi, poi per lunghezza decrescente
         output.sort {
             if $0.isFullMatch != $1.isFullMatch { return $0.isFullMatch }
             return $0.usedLetterCount > $1.usedLetterCount
         }
 
+        // Collassa tutte le sezioni tranne la più grande per leggibilità
         results = output
 
         let allSections = Set(output.map { $0.usedLetterCount })
@@ -731,57 +810,70 @@ struct ContentView: View {
         } else {
             collapsedSections = []
         }
+        // Segnala che è stata eseguita almeno una ricerca
         hasSearched = true
+        // Avvia deep search sui leftover se attiva
         if deepSearchEnabled { triggerDeepSearch() }
-        }
+    }
 
+    // Avvia il calcolo parallelo dei leftover prioritizzando i più corti
     private func triggerDeepSearch() {
-        deepSearchQueue.cancelAllOperations()  /// Cancella eventuali operazioni vecchie
+        // Cancella operazioni pendenti per evitare lavoro inutile
+        deepSearchQueue.cancelAllOperations()
 
-        let uniqueLeftovers = Array(Set(    /// Deduplica leftover
+        // Estrae i leftover unici con almeno 2 lettere
+        let uniqueLeftovers = Array(Set(
             results
                 .map { $0.leftover }
                 .filter { $0.count >= 2 }
         ))
 
-        let prioritized = uniqueLeftovers    /// Priorità: leftover più corti prima
+        // Priorità: leftover più corti prima, poi limita a maxDeepSearchTasks
+        let prioritized = uniqueLeftovers
             .sorted { $0.count < $1.count }
             .prefix(maxDeepSearchTasks)
 
+        // Pianifica il caricamento di ciascun leftover
         for leftover in prioritized {
             loadLeftover(leftover)
         }
     }
     
+    // Carica (o recupera da cache) i match esatti per un leftover
     private func loadLeftover(_ leftover: String) {
+        // Evita richieste duplicate o non necessarie
         guard leftover.count >= 2,
               leftoverCache[leftover] == nil,
               !loadingLeftovers.contains(leftover) else { return }
 
+        // Marca il leftover come in caricamento
         loadingLeftovers.insert(leftover)
         let currentMinLength = minLength
 
+        // Esegue la query su coda in background
         deepSearchQueue.addOperation {
 
-            // Se l'operazione è stata cancellata → esci subito
+            // Se la coda è sospesa/cancellata, interrompi
             if self.deepSearchQueue.isSuspended { return }
 
+            // Query al DB: parole che corrispondono esattamente al leftover
             let matches = WordDatabase.shared.exactMatches(
                 using: leftover,
                 minLength: currentMinLength
             )
 
+            // Se ci sono cancellazioni in corso, evita di aggiornare
             if self.deepSearchQueue.operations.contains(where: { $0.isCancelled }) {
                 return
             }
 
             OperationQueue.main.addOperation {
-                // Se nel frattempo è cambiata la ricerca → ignora
+                // Se il contesto di ricerca è cambiato, ignora i risultati
                 guard self.loadingLeftovers.contains(leftover) else { return }
 
                 self.loadingLeftovers.remove(leftover)
 
-                // Limita la cache (evita crescita infinita)
+                // Mantiene la cache entro i limiti configurati
                 if self.leftoverCache.count > self.maxCacheSize {
                     self.leftoverCache.removeAll()
                 }
@@ -791,6 +883,7 @@ struct ContentView: View {
         }
     }
 
+    // Precarica tutte le parole (>=4) su thread in background
     private func loadInitialData() {
         DispatchQueue.global(qos: .userInitiated).async {
             let words = WordDatabase.shared.allWords(minLength: 4)
@@ -798,14 +891,17 @@ struct ContentView: View {
         }
     }
 
+    // Gestisce modifiche al testo di ricerca: normalizzazione, limite, debounce
     private func handleSearchTextChange(_ newValue: String) {
-        // Cancella deep search quando cambia contesto
+        // Reset deep search quando l'input cambia
         deepSearchQueue.cancelAllOperations()
         loadingLeftovers.removeAll()
  
+        // Mantiene solo lettere e spazi, in maiuscolo
         let cleaned = newValue.uppercased().filter { $0.isLetter || $0 == " " }
         let letterCount = cleaned.filter { $0.isLetter }.count
 
+        // Enforce: taglia l'input oltre il numero massimo di lettere
         if letterCount > maxLetters {
             var result = ""
             var lettersAdded = 0
@@ -823,14 +919,17 @@ struct ContentView: View {
             return
         }
 
+        // Applica la versione pulita all'UI se necessario
         if cleaned != newValue { searchText = cleaned }
 
+        // Live search: debounce leggero prima di avviare la ricerca
         if searchAsYouType {
             liveSearchWorkItem?.cancel()
             let work = DispatchWorkItem { performSearch() }
             liveSearchWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
         } else {
+            // Se la live search è disattivata, resetta i risultati quando cambia input
             if hasSearched {
                 results = []
                 hasSearched = false
@@ -842,6 +941,8 @@ struct ContentView: View {
 // ─────────────────────────────────────────────
 // MARK: - Subviews
 // ─────────────────────────────────────────────
+
+// Riga singolo risultato con azioni: definizione e (opz.) leftover
 struct ResultRow: View {
     let result: MatchResult
     let deepSearchEnabled: Bool
@@ -862,6 +963,7 @@ struct ResultRow: View {
 
             Spacer()
 
+            // Mostra il leftover con stato (in caricamento, disponibile, ecc.)
             if !result.isFullMatch && !result.leftover.isEmpty {
                 let matches = leftoverCache[result.leftover]
                 let hasMatches = !(matches?.isEmpty ?? true)
@@ -908,6 +1010,7 @@ struct ResultRow: View {
     }
 }
 
+// Sheet che elenca le parole trovate per un leftover; tap per definizione
 struct LeftoverSheet: View {
     let title: String
     let words: [String]
@@ -941,6 +1044,7 @@ struct LeftoverSheet: View {
     }
 }
 
+// Stato vuoto: guida iniziale o messaggio di nessun risultato
 struct EmptyStateView: View {
     let searchText: String
     let minLength: Int
@@ -968,3 +1072,4 @@ struct EmptyStateView: View {
 #Preview {
     ContentView()
 }
+
